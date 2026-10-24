@@ -1,0 +1,34 @@
+# 每次 push / PR 编译一遍。
+# 这一个 job 只做"能编译 + 十套探针里两套跑得通", 不产出安装包
+# (打包脚本 tools/make_dist_*.py 要读本机那个发布目录, CI 上没有)。
+name: build
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 编译主程序
+        run: dotnet build -c Release --nologo
+
+      - name: 编译并跑 coretest(打字逻辑)
+        run: |
+          cd tools/coretest
+          dotnet build -c Release --nologo
+          .\bin\Release\net8.0\coretest.exe
+
+      - name: 编译并跑 fprobe(换屏 / 设置那些规矩)
+        run: |
+          cd tools/fprobe
+          dotnet build -c Release --nologo
+          .\bin\Release\net8.0\fprobe.exe

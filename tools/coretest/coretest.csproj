@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    无头测试台: 直接把 InputCore.cs / T9Engine.cs 编进来, 用桩替换掉
+    TextOutput(真发按键) / ImeStatus(真切输入法) / GamepadInput(真读手柄)。
+    这样验证输入逻辑不用真的连手柄、也不用模拟按键, 结果稳定可重复。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>coretest</AssemblyName>
+    <RootNamespace>CoreTest</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Stubs.cs" />
+    <Compile Include="Program.cs" />
+    <!-- **必须指向 skin-lab 那一份**: 根目录 GamepadT9-Game\ 是 1.0.2 时代留下的
+         旧副本(Config 还是单参数的老签名)。以前指过去, 测的是三四个版本前的代码,
+         "全部通过"是假的 —— 真改了哪里它根本不知道。 -->
+    <Compile Include="..\..\InputCore.cs" />
+    <Compile Include="..\..\T9Engine.cs" />
+    <Compile Include="..\..\Keyboard26.cs" />
+    <Compile Include="..\..\ScreenId.cs" />
+    <Compile Include="..\..\Config.cs" />
+    <Compile Include="..\..\Slide.cs" />
+    <Compile Include="..\..\Quick.cs" />
+    <Compile Include="..\..\IQuickHost.cs" />
+    <Compile Include="..\..\IQuickUI.cs" />
+
+    <Compile Include="..\..\FxStyle.cs" />
+    <Compile Include="..\..\KeyShape.cs" />
+    <Compile Include="..\..\ISettingsHost.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Config 用 DPAPI 加密输入习惯, 这个包不在基础库里 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    探 Windows 自带的 WinRT 手柄接口 `Windows.Gaming.Input` —— 网页那个
+    "手柄按键测试"走的就是它(浏览器在 Windows 上的 HTML5 Gamepad API 实现)。
+
+    目的: 确认这个接口认不认 DualSense / Switch Pro, 认了的话就不用自己啃 HID 了。
+    单独的工程是因为它要带 Windows SDK 版本号的 TFM, 不想动主程序的 csproj。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>giprobe</AssemblyName>
+    <RootNamespace>Giprobe</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+</Project>

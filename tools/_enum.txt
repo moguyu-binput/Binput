@@ -1,0 +1,1 @@
+﻿pid=13712 mainHwnd=0 (no main window)

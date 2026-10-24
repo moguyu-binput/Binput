@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    滑行输入的专项测试台。只把 Slide.cs(识别器) 和 Config.cs(记录 + 标定) 编进来,
+    不碰 InputCore —— 这两块能被单独喂摇杆坐标 / 定点记录来验,
+    于是不必真的连手柄, 结果稳定可重复。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>strokeprobe</AssemblyName>
+    <RootNamespace>StrokeProbe</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="..\..\Slide.cs" />
+    <Compile Include="..\..\FxStyle.cs" />
+    <Compile Include="..\..\KeyShape.cs" />
+    <Compile Include="..\..\Config.cs" />
+    <Compile Include="..\..\Quick.cs" />
+    <Compile Include="Stub.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

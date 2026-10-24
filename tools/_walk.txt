@@ -1,0 +1,6 @@
+WALK sc=0.60 win=(161,31,726x752) calcC=(524,633) calcSize=(216x216) realC=(786,949) realSize=(324x324) calcCardBot=768 calcCardC=(524,635) drop=235.8 areaBot=1019 areaRight=1707
+WALK sc=0.80 win=(161,81,726x752) calcC=(524,633) calcSize=(288x288) realC=(786,949) realSize=(432x432) calcCardBot=813 calcCardC=(524,636) drop=235.8 areaBot=1019 areaRight=1707
+WALK sc=1.00 win=(161,131,726x752) calcC=(524,632) calcSize=(360x360) realC=(786,949) realSize=(540x540) calcCardBot=857 calcCardC=(524,636) drop=235.8 areaBot=1019 areaRight=1707
+WALK sc=1.30 win=(161,207,726x752) calcC=(524,632) calcSize=(468x468) realC=(786,949) realSize=(702x702) calcCardBot=925 calcCardC=(524,638) drop=235.8 areaBot=1019 areaRight=1707
+WALK sc=1.60 win=(161,250,726x784) calcC=(524,632) calcSize=(576x576) realC=(786,949) realSize=(864x864) calcCardBot=992 calcCardC=(524,639) drop=235.8 areaBot=1019 areaRight=1707
+WALK sc=1.80 win=(145,249,758x816) calcC=(524,614) calcSize=(648x648) realC=(786,920) realSize=(973x972) calcCardBot=1019 calcCardC=(524,621) drop=235.8 areaBot=1019 areaRight=1707

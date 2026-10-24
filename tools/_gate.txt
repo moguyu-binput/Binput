@@ -1,0 +1,4 @@
+起始: shown=False anim=False rowH=0 pend=0
+按一下 X(退格), 没字没拼音: pend=0 shown=False anim=False rowH=0  <-- 该是 False/False/0
+按一下 Esc:                 pend=0 shown=False anim=False rowH=0  <-- 该是 False/False/0
+发一个字母 n:              pend=2 shown=True anim=True rowH=42  <-- 该是 True/True/42

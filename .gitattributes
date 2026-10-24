@@ -1,0 +1,21 @@
+# 换行符: 这份仓库是 Windows 的 WPF 工程, 源码一律 CRLF。
+# text=auto 让 Git 自己认是不是文本; 下面这几类**强制 CRLF**,
+# 免得哪天在 Linux 上检出之后, 写 版本说明.md 的那个脚本的自检(\r\r\n / 裸 LF)翻脸。
+* text=auto
+
+*.cs      text eol=crlf
+*.xaml    text eol=crlf
+*.csproj  text eol=crlf
+*.md      text eol=crlf
+*.txt     text eol=crlf
+*.py      text eol=crlf
+*.cmd     text eol=crlf
+*.yml     text eol=crlf
+
+# 二进制, 一个字节都不许动
+*.png  binary
+*.ico  binary
+*.zip  binary
+*.exe  binary
+*.dll  binary
+*.pdb  binary

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>进层动画演示 · 点开 App 式展开</title>
+<style>
+  :root{
+    --bg:#0F0B10; --card:#141420; --cell:#26262F; --cell2:#3A3A48;
+    --ink:#F2EFE4; --sub:#8A8590; --hot:#FAC775; --line:#3C3C48;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"Microsoft YaHei",system-ui,sans-serif;font-size:13px;line-height:1.6}
+  .wrap{display:flex;gap:28px;padding:26px;align-items:flex-start;flex-wrap:wrap}
+  h1{font-size:15px;font-weight:500;margin:0 0 4px}
+  .lead{color:var(--sub);font-size:12px;margin:0 0 18px}
+
+  /* ---------- 舞台：模拟柄输那张卡片里的内容区 360x360 ---------- */
+  .stagebox{position:relative;width:412px}
+  .cap{color:var(--sub);font-size:12px;margin:0 0 8px}
+  .card{width:412px;height:442px;background:var(--card);border:1px solid var(--line);
+        border-radius:14px;display:flex;align-items:center;justify-content:center;position:relative}
+  .stage{position:relative;width:360px;height:360px;overflow:hidden}
+
+  .page{position:absolute;inset:0;display:grid;grid-template-columns:repeat(3,112px);
+        grid-template-rows:repeat(3,112px);gap:4px;justify-content:center;align-content:center}
+  .cell{width:112px;height:112px;border-radius:10px;background:var(--cell);
+        border:1px solid var(--line);display:flex;flex-direction:column;
+        align-items:center;justify-content:center;cursor:pointer;user-select:none}
+  .cell .k{font-size:20px;font-weight:500;color:var(--ink)}
+  .cell .s{font-size:11px;color:var(--sub);margin-top:2px}
+  .cell:hover{background:var(--cell2)}
+  .cell.more{border-color:var(--hot)}
+
+  /* 二级页：暖一点，好分清是哪一页 */
+  .page.b .cell{background:#2E2A22;border-color:#5A4A22}
+  .page.b .cell .s{color:#B9A98C}
+  .ptitle{position:absolute;top:6px;left:0;right:0;text-align:center;
+          font-size:12px;color:var(--sub);pointer-events:none}
+  .back{position:absolute;bottom:8px;right:8px;width:60px;height:34px;border-radius:8px;
+        background:var(--cell2);border:1px solid var(--line);color:var(--ink);
+        font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .back:hover{background:#4A4A58}
+
+  /* ---------- 展开用的"壳" ---------- */
+  .shell{position:absolute;background:var(--cell);border:1px solid var(--line);
+         pointer-events:none;display:none;z-index:5}
+
+  /* ---------- 参数面板 ---------- */
+  .panel{width:330px}
+  .row{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+  .row label{width:150px;color:var(--sub);font-size:12px}
+  .row input[type=range]{flex:1}
+  .row .v{width:54px;text-align:right;font-size:12px;color:var(--hot)}
+  fieldset{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 14px}
+  legend{color:var(--sub);font-size:12px;padding:0 6px}
+  button.act{background:var(--cell2);border:1px solid var(--line);color:var(--ink);
+             border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer;margin-right:6px}
+  button.act:hover{background:#4A4A58}
+  button.act.on{background:var(--hot);color:#2A1F08;border-color:var(--hot)}
+  .note{color:var(--sub);font-size:12px;margin-top:10px;line-height:1.7}
+  .kv{color:var(--hot)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stagebox">
+    <h1>进层动画演示</h1>
+    <p class="lead">点左边任意一个格子 → 从那一格撑开成整页。进去后点右下角「返回」缩回原处。</p>
+    <div class="card">
+      <div class="stage" id="stage">
+        <div class="page" id="p1"></div>
+        <div class="page b" id="p2" style="display:none"></div>
+        <div class="shell" id="shell"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <fieldset>
+      <legend>模式</legend>
+      <button class="act on" id="mZoom">有源格子（展开）</button>
+      <button class="act" id="mFade">无源格子（淡入淡出）</button>
+      <div class="note" id="modeNote"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>参数</legend>
+      <div class="row"><label>整段时长</label><input type="range" id="dur" min="150" max="700" step="10" value="320"><span class="v" id="durV"></span></div>
+      <div class="row"><label>旧页后退到</label><input type="range" id="back" min="0.80" max="1.00" step="0.01" value="0.94"><span class="v" id="backV"></span></div>
+      <div class="row"><label>壳圆角 起 → 止</label><input type="range" id="r1" min="0" max="24" step="1" value="10"><span class="v" id="r1V"></span></div>
+      <div class="row"><label>　（止）</label><input type="range" id="r2" min="0" max="24" step="1" value="14"><span class="v" id="r2V"></span></div>
+      <div class="row"><label>新内容淡入起点</label><input type="range" id="dIn" min="0" max="80" step="5" value="35"><span class="v" id="dInV"></span></div>
+      <div class="row"><label>壳底色跟随格子</label><input type="range" id="tint" min="0" max="100" step="5" value="100"><span class="v" id="tintV"></span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>曲线</legend>
+      <button class="act on" id="eSlide">慢起·加速·减速停</button>
+      <button class="act" id="eOut">标准减速</button>
+      <button class="act" id="eLin">匀速</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>播放</legend>
+      <button class="act" id="slow">慢放 0.25×</button>
+      <button class="act" id="loop">连播</button>
+      <div class="note">慢放能看清每一段谁先谁后；连播会进、退反复演。</div>
+    </fieldset>
+
+    <div class="note" id="stat"></div>
+  </div>
+</div>
+
+<script>
+const S = document.getElementById('stage');
+const P1 = document.getElementById('p1');
+const P2 = document.getElementById('p2');
+const SH = document.getElementById('shell');
+
+const A = ['JKL','ABC','DEF','GHI','快捷','MNO','PQRS','TUV','更多'];
+const B = ['主题','皮肤','按键','速度','动效','词库','短语','关于','版本'];
+
+// ---- 两页各自摆九个格子 ----
+function fill(page, names, isB){
+  page.innerHTML = '';
+  names.forEach((n,i)=>{
+    const d = document.createElement('div');
+    d.className = 'cell' + (n === '更多' ? ' more' : '');
+    d.innerHTML = '<div class="k">' + n + '</div><div class="s">' + (i+1) + '</div>';
+    d.onclick = () => go(i);
+    page.appendChild(d);
+  });
+  if (isB){
+    const t = document.createElement('div');
+    t.className = 'ptitle'; t.textContent = '二级页';
+    page.appendChild(t);
+    const b = document.createElement('div');
+    b.className = 'back'; b.textContent = '返回';
+    b.onclick = (e) => { e.stopPropagation(); back(); };
+    page.appendChild(b);
+  }
+}
+fill(P1, A, false);
+fill(P2, B, true);
+
+// ---- 参数 ----
+const P = {dur:320, back:0.94, r1:10, r2:14, dIn:35, tint:100, ease:'slide', slow:false, loop:false, mode:'zoom'};
+const EASES = {
+  slide: t => t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2,   // 慢起·加速·减速停
+  out:   t => 1 - Math.pow(1-t, 3),
+  lin:   t => t
+};
+function bind(id, key, fmt){
+  const el = document.getElementById(id), v = document.getElementById(id+'V');
+  const sync = () => { P[key] = parseFloat(el.value); v.textContent = fmt(P[key]); };
+  el.oninput = sync; sync();
+}
+bind('dur','dur', v=>v+'ms');
+bind('back','back', v=>v.toFixed(2));
+bind('r1','r1', v=>v);
+bind('r2','r2', v=>v);
+bind('dIn','dIn', v=>v+'%');
+bind('tint','tint', v=>v+'%');
+
+function pick(ids, key, val){
+  ids.forEach((x,i)=>{
+    document.getElementById(x).onclick = () => {
+      P[key] = val[i];
+      ids.forEach(y=>document.getElementById(y).classList.remove('on'));
+      document.getElementById(x).classList.add('on');
+    };
+  });
+}
+pick(['eSlide','eOut','eLin'],'ease',['slide','out','lin']);
+pick(['mZoom','mFade'],'mode',['zoom','fade']);
+
+document.getElementById('slow').onclick = e => { P.slow = !P.slow; e.target.classList.toggle('on', P.slow); };
+document.getElementById('loop').onclick = e => { P.loop = !P.loop; e.target.classList.toggle('on', P.loop); };
+
+// ---- 状态 ----
+let cur = 1, homeIdx = 4, busy = false;
+
+function rectOf(el){
+  const s = S.getBoundingClientRect(), r = el.getBoundingClientRect();
+  return { x:r.left-s.left, y:r.top-s.top, w:r.width, h:r.height };
+}
+
+function mix(a,b,t){ return a + (b-a)*t; }
+
+// 壳底色：在"卡片底色"和"被点那格的颜色"之间取值(tint=100 全用格子色)
+function mixColor(a, b, t){
+  const pa = a.match(/\d+/g).map(Number), pb = b.match(/\d+/g).map(Number);
+  return 'rgb(' + pa.map((v,i)=>Math.round(v + (pb[i]-v)*t)).join(',') + ')';
+}
+const CARD_RGB = 'rgb(20,20,32)';
+
+function animate(fn, ms){
+  const t0 = performance.now();
+  return new Promise(res=>{
+    function step(now){
+      let t = (now - t0) / ms;
+      if (t > 1) t = 1;
+      fn(t);
+      if (t < 1) requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+async function go(idx){
+  if (busy || cur !== 1) return;
+  busy = true; homeIdx = idx;
+  const cell = P1.children[idx];
+  const from = rectOf(cell);
+  const to   = {x:0, y:0, w:360, h:360};
+  const base = getComputedStyle(cell).backgroundColor;
+  const ms = P.dur * (P.slow ? 4 : 1);
+
+  if (P.mode === 'fade'){
+    P2.style.display = 'grid';
+    P2.style.opacity = 0;
+    await animate(t => {
+      const e = EASES[P.ease](t);
+      P1.style.opacity = 1 - Math.min(1, e * 1.6);
+      P2.style.opacity = t < P.dIn/100 ? 0 : Math.min(1, (t - P.dIn/100) / (1 - P.dIn/100));
+    }, ms);
+  } else {
+    SH.style.display = 'block';
+    SH.style.background = mixColor(CARD_RGB, base, P.tint/100);
+    P2.style.display = 'grid';
+    P2.style.opacity = 0;
+    await animate(t => {
+      const e = EASES[P.ease](t);
+      // 壳：从那一格撑到整页，圆角按绝对值过渡（不跟着放大）
+      SH.style.left   = mix(from.x, to.x, e) + 'px';
+      SH.style.top    = mix(from.y, to.y, e) + 'px';
+      SH.style.width  = mix(from.w, to.w, e) + 'px';
+      SH.style.height = mix(from.h, to.h, e) + 'px';
+      SH.style.borderRadius = mix(P.r1, P.r2, e) + 'px';
+      SH.style.opacity = 1;
+      // 旧页：原地后退 + 淡出
+      P1.style.transform = 'scale(' + mix(1, P.back, e) + ')';
+      P1.style.opacity = 1 - Math.min(1, e * 1.5);
+      // 新内容：不放大，只在壳上淡入
+      const d = P.dIn/100;
+      P2.style.opacity = t < d ? 0 : Math.min(1, (t - d) / Math.max(0.05, 1 - d));
+    }, ms);
+  }
+  finishIn();
+  busy = false;
+  if (P.loop) setTimeout(()=>back(), 420);
+}
+
+async function back(){
+  if (busy || cur !== 2) return;
+  busy = true;
+  // 【量之前必须先把旧页摆出来、并把缩放摘掉】藏着的元素量出来是 0x0(那就缩到左上角了);
+  // 而带着 scale 量到的是**缩小后**的矩形, 也不是那一格真正的位置。
+  P1.style.display = 'grid';
+  P1.style.transform = 'none';
+  const cell = P1.children[homeIdx];
+  const to = rectOf(cell);
+  const ms = P.dur * (P.slow ? 4 : 1);
+
+  if (P.mode === 'fade'){
+    P1.style.display = 'grid';
+    P1.style.opacity = 0;
+    await animate(t => {
+      const e = EASES[P.ease](t);
+      P2.style.opacity = 1 - Math.min(1, e * 1.6);
+      P1.style.opacity = t < P.dIn/100 ? 0 : Math.min(1, (t - P.dIn/100)/(1 - P.dIn/100));
+    }, ms);
+  } else {
+    P1.style.transform = 'scale(' + P.back + ')';   // 量完立刻摆到起点, 免得露一帧原样
+    P1.style.opacity = 0;
+    SH.style.display = 'block';
+    SH.style.background = mixColor(CARD_RGB, getComputedStyle(cell).backgroundColor, P.tint/100);
+    SH.style.opacity = 1;
+    P2.style.opacity = 1;
+    await animate(t => {
+      const e = EASES[P.ease](t);
+      SH.style.left   = mix(0, to.x, e) + 'px';
+      SH.style.top    = mix(0, to.y, e) + 'px';
+      SH.style.width  = mix(360, to.w, e) + 'px';
+      SH.style.height = mix(360, to.h, e) + 'px';
+      SH.style.borderRadius = mix(P.r2, P.r1, e) + 'px';
+      P1.style.transform = 'scale(' + mix(P.back, 1, e) + ')';
+      P1.style.opacity = Math.min(1, e * 1.5);
+      const d = P.dIn/100;
+      P2.style.opacity = t < d ? 1 : 1 - Math.min(1, (t - d)/Math.max(0.05, 1 - d));
+    }, ms);
+  }
+  finishOut();
+  busy = false;
+  if (P.loop) setTimeout(()=>go(homeIdx), 420);
+}
+
+function finishIn(){
+  P1.style.display = 'none'; P1.style.opacity = 1; P1.style.transform = 'none';
+  P2.style.display = 'grid'; P2.style.opacity = 1;
+  SH.style.display = 'none';
+  cur = 2;
+  stat();
+}
+function finishOut(){
+  P2.style.display = 'none'; P2.style.opacity = 1;
+  P1.style.display = 'grid'; P1.style.opacity = 1; P1.style.transform = 'none';
+  SH.style.display = 'none';
+  cur = 1;
+  stat();
+}
+function stat(){
+  document.getElementById('stat').innerHTML =
+    '当前在第 <span class="kv">' + cur + '</span> 页 · 进来时从 <span class="kv">第 '
+    + (homeIdx+1) + ' 格（' + A[homeIdx] + '）</span> 进去的 → 返回就缩回这一格';
+}
+document.getElementById('modeNote').innerHTML =
+  '有源格子：壳从那一格撑开 + 新内容淡入 + 旧页后退淡出。<br>无源格子：没有"从哪个按钮进来"这回事，只做后半段 —— 旧页淡出、新页淡入。';
+stat();
+</script>
+</body>
+</html>

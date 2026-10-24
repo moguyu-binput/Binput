@@ -1,0 +1,12 @@
+﻿OK glass_front
+OK glass_back
+OK glass_en26
+OK glass_wheel
+OK float_front
+OK float_back
+OK float_en26
+OK float_wheel
+tools\shots\sheet_glass_dark.png (2014, 488)
+tools\shots\sheet_glass_light.png (2014, 488)
+tools\shots\sheet_float_dark.png (2017, 488)
+tools\shots\sheet_float_light.png (2017, 488)

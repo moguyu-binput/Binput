@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>useprobe</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <!-- 只测"输入习惯这份文件怎么存、怎么搬"这一层, 不牵界面 -->
+    <Compile Include="..\..\FxStyle.cs" />
+    <Compile Include="..\..\KeyShape.cs" />
+    <Compile Include="..\..\Config.cs" />
+    <Compile Include="..\..\Slide.cs" />
+    <Compile Include="..\..\Quick.cs" />
+
+    <Compile Include="..\..\T9Engine.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Config 用 DPAPI(ProtectedData)加密, 这个包不在基础库里 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="dict.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

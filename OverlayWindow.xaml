@@ -1,0 +1,549 @@
+<Window x:Class="Binput.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Binput"
+        Title="柄输"
+        Width="726" Height="752"
+        WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
+        Background="Transparent" Topmost="True" ShowInTaskbar="False" Focusable="False"
+        FontFamily="Microsoft YaHei, Segoe UI">
+
+    <Window.Resources>
+        <!--
+            ===================== 「内容区宽度」只有一个源头 =====================
+            键盘区(KeyArea)、框(Frame)、以及卡片外面那四行(候选 / 拼音 / 状态 /
+            预览框)的宽度, 以前是 C# 里手写的**六行赋值**, 而且无动画和有动画两条
+            路各写了一遍 —— 一件事复制了六份, 就有六次机会漏掉其中一个。
+            现在它们一律绑定窗口上的 ContentW: 那个数变, 六个一起变, 谁都不用
+            记得去写。框比内容区宽一圈这件事用 FrameWConv 表达成"关系",
+            不再手算。
+            (ContentW 定义在 OverlayWindow.xaml.cs, 是个依赖属性 —— 依赖属性
+             才能被 DoubleAnimation 直接驱动。)
+        -->
+        <local:FrameWConv x:Key="FrameWConv"/>
+
+        <!--
+            滚动条: 系统那条是 17px 宽的灰白方块 + 两个箭头按钮, 在这一整块深色界面里
+            像贴了块胶布。这里换成一条 10px 宽的圆角细条 —— 轨道全透明(不画槽,
+            免得又多一条竖线), 滑块半透明, 鼠标移上去才亮一点, 颜色取界面自己在用的那几个色。
+            挂在 Window.Resources 上: 设置页和预览框(记事本)用的是同一个 ScrollViewer,
+            两处都该是这条, 分开写只会漏掉一处。
+        -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="MinWidth" Value="10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True"
+                                   Focusable="False">
+                                <!-- 两端的空白区: 透明, 但要吃掉点击(翻页) -->
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Focusable="False">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="Knob"
+                                                        Background="#4A4A60"
+                                                        CornerRadius="3"
+                                                        Margin="3,0,1,0"
+                                                        Opacity="0.75"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Knob"
+                                                                Property="Background"
+                                                                Value="#85B7EB"/>
+                                                        <Setter TargetName="Knob"
+                                                                Property="Opacity" Value="1"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 角落图标按钮(正面齿轮 / 背面返回箭头)的皮:
+             WPF 默认的 Button 模板会在鼠标移上去时刷一层浅色底(那块"亮方块"),
+             我们要的反馈只有"图标放大", 所以直接把模板换成一层全透明的壳。 -->
+        <Style x:Key="CornerIcon" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{x:Null}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- 翻面容器(名字留着, 但翻面特效已经撤了 —— 见 C# 里 Flip 的说明)。
+         它现在只是舞台的最外层。 -->
+    <Grid x:Name="FlipHost" RenderTransformOrigin="0.5,0.5">
+
+    <!-- ==================================================================
+         舞台上那一摞(2.1.0 重构)
+
+         窗口是一整块定死的透明舞台(尺寸见 C# 里的 StageW / StageH)。
+         舞台上**唯一贴底居中**的是 OverPanel 这一摞, 从上到下摆:
+
+             预览框   —— 有字才出现, 从 0 高往上升出来(没字就是 0 像素)
+             编辑条   —— 只在"添加/改短语、录快捷键"时
+             空档     —— 留给系统输入法候选窗(只有九键拼拼音时才要)
+             拼音候选 —— 五个格子, **有候选才占那 46**
+             拼音行   —— **有拼音才占那 34**
+             卡片     —— 九键那个正方形 / 全键盘 / 设置(同一格, 一次只露一个)
+             状态行   —— "滑行" / 符号分类名, 恒在卡片**下面**、框外面
+
+         两条要靠这个结构才立得住的规矩:
+           ① **九键那块是正方形, 而且永远不动**。卡片下面只有恒定一行的状态行,
+              所以九键离屏幕底的距离恒定 —— 上面那几行爱长多长长多长,
+              缩到 0 也只是舞台顶端往下收, 卡片一像素都不挪。这正是
+              "9 键上面不要再有一段空白"能成立的原因: 没内容就是真 0,
+              不再是"钉死 46px 的空行 + 顶带 26"那种永远空着的一条。
+           ② **拼音候选 / 滑行 / 预览框全在卡片(框)外面**, 舞台是透明的,
+              想摆哪儿摆哪儿, 卡片自己就只是那块正方形。
+         ================================================================== -->
+    <Grid x:Name="OverPanel" HorizontalAlignment="Center" VerticalAlignment="Bottom">
+        <Grid.RowDefinitions>
+            <!-- 预览框那一行: **高度由 C# 直接给**(有字 42~138、没字 0)。
+                 不能写 Auto —— Auto 会去问 NotePanel 想要多高, 而它里面那个记事本
+                 永远想要至少一行, 于是"藏起来"了还会空出一条。 -->
+            <RowDefinition x:Name="RowNote"      Height="0"/>
+            <RowDefinition x:Name="RowPad"       Height="0"/>
+            <RowDefinition x:Name="RowCand"      Height="0"/>
+            <RowDefinition x:Name="RowPinyin"    Height="0"/>
+            <RowDefinition x:Name="RowCard"      Height="Auto"/>
+            <RowDefinition x:Name="RowStatus"    Height="26"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===================== 预览框(卡片外面, 最上面) =====================
+             预输入版的记事本。**有字才出现, 没字高度就是 0** —— 见 C# 的 SyncNotePanel:
+             高度由动画从 0 推到"刚好装下这几行", 因为这一摞是贴底的,
+             所以它天然是**往上长**的(底边不动、顶边往上顶), 看起来就是浮上来。
+             高度跟着行数走(1 行 40 ~ 5 行 136), 光标那行永远贴在框底;
+             超过 5 行不再长, TextBox 自己往上滚。 -->
+        <Border x:Name="NotePanel" Grid.Row="0" Opacity="0"
+                Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}"
+                IsHitTestVisible="False" HorizontalAlignment="Center"
+                Background="#1B1017" CornerRadius="8"
+                BorderBrush="#5A4A22" BorderThickness="1">
+            <Grid>
+                <TextBox x:Name="NoteBox"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         MinHeight="40" MaxHeight="40"
+                         Background="Transparent" BorderThickness="0"
+                         Foreground="#F2EFE4" FontSize="17" CaretBrush="#FAC775"
+                         Padding="9,8,9,8"
+                         VerticalScrollBarVisibility="Auto"
+                         VerticalContentAlignment="Top"/>
+                <TextBlock x:Name="NoteHint" Text="打的字都放在这里 · 收起时自动复制"
+                           FontSize="11" Foreground="#78706A"
+                           Margin="11,7,0,0" IsHitTestVisible="False"
+                           HorizontalAlignment="Left" VerticalAlignment="Top"/>
+            </Grid>
+        </Border>
+
+        <!-- ===================== 拼音候选那 5 格(卡片外面, 上面) =====================
+             高度由 Render 给: 有候选 46、没候选 **0**(不再钉死一行空白)。
+             没字的格子直接藏掉(见 Render)。 -->
+        <UniformGrid x:Name="CandRow" Grid.Row="2" Columns="5"
+                     Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}"
+                     HorizontalAlignment="Center"/>
+
+        <!-- 拼音行: 紧贴候选下面。**有拼音才占 34, 没拼音就是 0**。
+             摆几个是 MeasurePinyinFit 按真实宽度量出来的, 正常不会折行;
+             万一单条太长就靠 TextWrapping 在格子内折, 不再撑高这一行。 -->
+        <WrapPanel x:Name="PinyinRow" Grid.Row="3" Orientation="Horizontal"
+                   Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" Margin="0,3,0,3"/>
+
+        <!-- ================= 正面: 键盘 ================= -->
+        <!-- 正面那张可见的卡片。和背面**同一格**(RowCard), 一次只露一个 ——
+             【长按 Y】进设置就是把这张换成那张(短按 R3 那套在 2.3.2 换掉了),
+             卡片的位置大小一模一样, 看上去就是"九颗键变成了九个设置格"。 -->
+        <Border x:Name="Root" Grid.Row="4" Background="#E8141420" CornerRadius="14"
+                BorderBrush="#3C3C48" BorderThickness="1"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Grid>
+                <!-- 皮肤底纹层: 平时 Opacity=0, 完全不参与任何一套纯色主题。
+                     切到"贴纸风"那套时, ApplyTheme 才会把它打开 —— 可爱粉铺一层方格纸底 +
+                     角上几颗小火花; 清新不铺方格纸, 只在四角放雏菊 / 云 / 小熊。
+                     它铺在内容下面(Grid 里第一个子元素 = 最底层), 不接收鼠标,
+                     也永远不改变窗口尺寸: 想看效果就开, 不想看就关。 -->
+                <Border x:Name="SkinDeco" IsHitTestVisible="False" Opacity="0">
+                    <Grid>
+                        <!-- 可爱粉的那几颗粉色小火花 -->
+                        <Canvas x:Name="CuteSparks">
+                            <Path Fill="#FF9CC8" Opacity="0.85" Stretch="Fill"
+                                  Canvas.Left="7" Canvas.Top="7" Width="11" Height="11"
+                                  Data="M6,0 L7.4,4.6 L12,6 L7.4,7.4 L6,12 L4.6,7.4 L0,6 L4.6,4.6 Z"/>
+                            <Path Fill="#FFB6D8" Opacity="0.8" Stretch="Fill"
+                                  Canvas.Right="11" Canvas.Top="10" Width="9" Height="9"
+                                  Data="M6,0 L7.4,4.6 L12,6 L7.4,7.4 L6,12 L4.6,7.4 L0,6 L4.6,4.6 Z"/>
+                            <Path Fill="#FF9CC8" Opacity="0.75" Stretch="Fill"
+                                  Canvas.Left="9" Canvas.Bottom="9" Width="8" Height="8"
+                                  Data="M6,0 L7.4,4.6 L12,6 L7.4,7.4 L6,12 L4.6,7.4 L0,6 L4.6,4.6 Z"/>
+                        </Canvas>
+                        <!-- 清新的角饰: 空的, ApplyTheme 切到清新时由 BuildFreshDeco 现搭。
+                             跟 CuteSparks 是兄弟, 谁亮谁灭由 ApplyTheme 切 Visibility。 -->
+                        <Canvas x:Name="FreshDeco" Visibility="Collapsed"/>
+                        <!-- 黄金的角饰(金块 / 金砖 / 钻石 / 宝石): 空的, 切到黄金时
+                             由 BuildGoldDeco 现搭。FreshDeco 的兄弟, 同一套规矩。 -->
+                        <Canvas x:Name="GoldDeco" Visibility="Collapsed"/>
+                    </Grid>
+                </Border>
+                <Grid x:Name="OuterGrid" Margin="14,10,14,10">
+                    <!-- 卡片里**只有内容区**: 九键 360×360(正方形) / 全键盘 640×360。 -->
+
+                <!-- ===================== 逻辑框(2.1.0) =====================
+                     内容区外面套的这一圈**不画出来**, 它只是给"标题 / 说明小字 / 齿轮"
+                     一个固定的家:
+                         顶带 26  —— 正面空着(背面才在左上角写"设置"二字)
+                         内容区   —— 九键 360×360 或 全键盘 640×360
+                         底带 34  —— 左边常驻说明小字、右边齿轮(背面是返回箭头)
+                     框的宽 = 内容宽 + 左右各 12, 由 Render 跟着内容宽度设;
+                     **高恒为 420**: 换全键盘只推左右两条边, 上下两条边钉着不动。
+                     ========================================================= -->
+                <Grid x:Name="Frame" HorizontalAlignment="Center"
+                      Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}, Converter={StaticResource FrameWConv}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="34"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 顶带: 正面空着, 但**占位** —— 九键 / 全键盘 / 设置三面的框
+                         一样高, 翻面和换布局时上下两条边才不会跳。
+                         窗口F 开着的时候这里写"当前是哪一层"(快捷 / 编辑 / 绑数字) ——
+                         行高是钉死的 26, 写不写都不挪动下面那条边。 -->
+                    <Grid x:Name="FrameHead" Grid.Row="0">
+                        <TextBlock x:Name="QuickTitle" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#E8E8F0" Margin="2,0,0,4"
+                                   VerticalAlignment="Center" HorizontalAlignment="Left"
+                                   Visibility="Collapsed"/>
+                    </Grid>
+
+                <!-- 键盘区。候选展开时覆盖在九键上(界面可以在屏幕上任意摆位,
+                     并排放右边的话很容易被摆出屏幕外) -->
+                <!-- ================= 这一格里「马上要走的那一张」 =================
+                     进数字层 / 进标点 / 按住 LB 进滑行 / JKL 换位 / 5x5 符号网格 /
+                     开关窗口F, 都是**这一格里面**在换内容。老规矩还是那条: 先给旧
+                     的拍张照摆在这儿替它站着, 真身立刻换成新面孔, 旧照片陪着演一场
+                     再撤 —— **它是过渡的道具不是真身**, 演完就撤。
+                     【2.1.15: 它从卡片外面搬进来了】以前这张照片(连同那场动画)做在
+                     **整张卡片 Root** 上: 卡片连着它那圈背景底板和描边一起淡出淡入,
+                     于是每一次换面看着都是"整个方框连同背景一起闪一下"。现在:
+                       · 照片只拍**内容区**那一块 360x360(KeyArea), 并且就摆在内容区
+                         的**底下**、框的里面 —— 它再怎么动也出不了这个框;
+                       · 那套动画也改挂在内容区上, 卡片的底板 / 描边 / 标题 / 齿轮
+                         从头到尾一像素都不挪;
+                       · 观感和设置页那一摞(EnsureVeil)完全对齐: 一样的高斯模糊、
+                         一样的压暗色(VeilBrush), 也就是"设置里钻深层"那一口。
+                     渲染次序靠**声明次序**: 它排在 KeyArea 前面, 于是压在内容的下面,
+                     新内容淡进来时它从底下透出来, 一边淡一边走。 -->
+                <Grid x:Name="FaceVeil" Grid.Row="1" Visibility="Collapsed"
+                      IsHitTestVisible="False"
+                      HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="FaceVeilImg" Stretch="Fill">
+                        <Image.Effect>
+                            <BlurEffect Radius="14" KernelType="Gaussian"/>
+                        </Image.Effect>
+                    </Image>
+                    <Border x:Name="FaceVeilShade"/>
+                </Grid>
+                <Grid x:Name="KeyArea" Grid.Row="1" Height="360"
+                      Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}">
+                    <UniformGrid x:Name="Grid9" Rows="3" Columns="3"/>
+                    <Canvas x:Name="StickLayer"/>
+                    <!-- ZIndex 必须高于 Grid9 / Grid26: 26 键的按钮是不透明的,
+                         轮盘在它们下面会被完全盖住 -->
+                    <Canvas x:Name="WheelLayer" Panel.ZIndex="99"/>
+                    <!-- 26 键那七排。宽度在 C# 里钉成 640(全键盘内容区的宽), **不跟着
+                         KeyArea 的宽度走** —— 换布局"左右扩张"那一下靠的是给它套一个
+                         ScaleTransform(见 C# 的 FlipLayout): 键盘区从 360 撑到 640 的同时
+                         缩放从 0.5625 回到 1, 全程刚好填满、不会有一排被切掉半截。
+                         高度居中: 七排 × (键高 40 + 键缝 4 + 排间 6) = 350, 塞在 360 里。 -->
+                    <StackPanel x:Name="Grid26" VerticalAlignment="Center"
+                                HorizontalAlignment="Center" Visibility="Collapsed"
+                                RenderTransformOrigin="0.5,0.5"/>
+                    <!-- 【2.1.1: 这一层不再垫底板】符号面板以前自带一块 #E8141420 的
+                         圆角板 + 一圈细边 —— 于是九宫格上面又开了一层背景, 和设置页
+                         那块是同一个毛病。现在它就是一层**透明的容器**: 摆的还是那些
+                         符号格, 底下不垫任何东西(底下那套九键由 Render 整层收掉)。
+                         LB / RB 两个翻页符号搬到**框外面**去了(见下面 PageSides)——
+                         它们原来占着左右两条竖列, 现在符号格能占满整个键盘区。 -->
+                    <Border x:Name="CandPanel" Visibility="Collapsed"
+                            Background="Transparent" BorderThickness="0">
+                        <UniformGrid x:Name="GridCand" Margin="8"/>
+                    </Border>
+                    <!-- 窗口F(2.1.1): 那一摞层就叠在这里 —— 列表层、长按一格浮出来的
+                         深层、再往下那一层数字。**和设置页完全同一套画法**(见 LayerHost):
+                         九颗键那么大、一样的手感, 只是叠在正面这块键盘区上。
+                         每一层都是 360×360, 正好是九键那块 3×3 的大小 ——
+                         "九颗键翻成九个快捷格"这件事才真的成立。
+                         ZIndex 要压过轮盘(99); 层与层之间的次序由 PushPage 自己排。 -->
+                    <Grid x:Name="QuickStage" Panel.ZIndex="150" Visibility="Collapsed"/>
+                </Grid>
+
+                    <!-- 框的**底带**: 左边常驻说明小字、右边齿轮(背面是返回箭头)。
+                         这两个**锚在框上, 不锚在九键那块上**: 框从 384 撑到 664 时
+                         它们跟着到新的左下角 / 右下角 —— 相对框永远在那两个角上,
+                         既不会乱飘, 也不会被压到按键上。 -->
+                    <Grid x:Name="FrameFoot" Grid.Row="2">
+                    <!-- 窗口F 的页码点: 五页五个点, 第几页第几个亮。
+                         和背面那排点(SetDotsBar)是同一个东西, 只是挂在正面的底带上。 -->
+                    <StackPanel x:Name="QuickDots" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="Collapsed"/>
+                    <!-- 符号面板的页码点: 几个分类几个点, 第几个亮。
+                         和窗口F 那排点(QuickDots)、背面那排点(SetDotsBar)是**同一样东西** ——
+                         翻页这件事全界面就只有一种说法: 底下几个点, 不用字, 也不用
+                         "常用 1/8" 那种数字页号(那个撤了, 见 StatusDock 里的注释)。 -->
+                    <StackPanel x:Name="PunctDots" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Visibility="Collapsed"/>
+                    <!-- 【2.1.1: 底带左边那行灰字(StatusText)撤了】
+                         它写的是"LB 滑行 / RB 发拼音 / LT 数字…"那一串常驻提示 ——
+                         每时每刻都在, 可真要看的时候根本读不完, 平时纯属碍眼。
+                         底带现在只剩**页码点**(居中)和**齿轮**(右下), 别的一概不留。 -->
+                    <!-- 齿轮: 点一下翻到背面的设置; 按住不放(约 0.3 秒)再挪可以拖动整个界面。
+                         按下/移动/松开由窗口统一处理(OverlayWindow.OnWinDown 等),
+                         按钮上不再挂事件 —— 挂在按钮上会丢 MouseUp, 一丢就变成
+                         "鼠标一碰齿轮界面就跟着跑"。 -->
+                    <Button x:Name="GearBtn" Width="22" Height="22"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource CornerIcon}"
+                            ToolTip="设置（长按可拖动界面）">
+                        <Viewbox x:Name="GearZoom" Width="15" Height="15"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Path x:Name="GearIcon" Fill="#8C8C9A"
+                                  Data="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                        </Viewbox>
+                    </Button>
+                    </Grid>
+                </Grid>
+
+            </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ================= 背面: 设置 =================
+             和正面**同一格**(RowCard)、**同一个尺寸**(414×442)。2.1.0 起进出设置
+             **不再翻面**, 就是这一张换掉那一张 —— 看上去完全是"九颗键变成了
+             九个设置格", 位置大小一分不差。 -->
+        <Border x:Name="Back" Grid.Row="4" Visibility="Collapsed"
+                Background="#E8141420" CornerRadius="14"
+                BorderBrush="#3C3C48" BorderThickness="1"
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- 和正面**同一个框**: 外面留白 14/10、顶带 26、底带 34, 一个数字都不能差
+                 —— 翻面时窗口才不会长一截短一截。背面这套三行就是框的顶带 / 内容区 / 底带。 -->
+            <Grid Margin="14,10,14,10">
+                <Grid.RowDefinitions>
+                    <!-- 弹簧: 和正面同一套 —— 翻到背面时, 框也要贴在离屏幕底**同一个
+                         距离**上, 不然翻一次面框就上下跳一次。 -->
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="26"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="34"/>
+                </Grid.RowDefinitions>
+
+                <!-- 标题标的是"当前那一层"(设置 / 皮肤 / 键盘...), 由 PaintChrome 现写。
+                     它挂在卡片**外面、框的左上角**: 里面那张卡片就是九颗键那么大的 3×3,
+                     标题挤进去就得把格子压扁。原来右上角那行"当前值 / 第几页"的小字
+                     撤了 —— 有几页、在第几页, 由底下一排页码点说, 不用字。 -->
+                <TextBlock x:Name="SetTitle" Grid.Row="1" FontSize="14" FontWeight="SemiBold"
+                           Foreground="#E8E8F0" Margin="2,0,0,4"
+                           VerticalAlignment="Center" HorizontalAlignment="Left"/>
+
+                <!-- 设置的内容区: 一层一层**叠**在这个格子里(见 OverlayWindow.xaml.cs
+                     里"设置页 九宫格层级"那一段)。不再有滚动条 —— 每一层都是一屏
+                     看得完的九宫格, 多了就翻页, 不用往下滚着找。 -->
+                <Grid x:Name="SetStage" Grid.Row="2"/>
+
+                <!-- 背面的右下角换成返回箭头: 和正面的齿轮在同一个角上,
+                     翻过去看起来就是齿轮"变成了"返回键。点一下翻回正面。
+                     这一行中间还多了一排**页码点**: 几页几个点, 第几页第几个亮。
+                     以前这里是"第 x / y 页 · LB / RB 翻页"一行小字, 既占地方
+                     又没多少人看 —— 换成点了。 -->
+                <!-- 框的**底带**: 和正面一样 —— 左边小字、右边返回箭头(正面是齿轮)。
+                     中间那排页码点还是居中, 它俩在一左一右, 谁也压不着谁。 -->
+                <Grid Grid.Row="3">
+                    <StackPanel x:Name="SetDotsBar" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- 【2.1.1: 底带左边那行"翻回键盘"(BackFoot)撤了】和正面那行灰字
+                         一个道理: 返回箭头自己就说明意思了, 旁边再挂一行小字只是碍眼。 -->
+                    <Button x:Name="BackBtn" Width="24" Height="24"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Style="{StaticResource CornerIcon}"
+                            ToolTip="返回键盘">
+                        <Viewbox x:Name="BackZoom" Width="16" Height="16"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Path Fill="#9FC7F5"
+                                  Data="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                        </Viewbox>
+                    </Button>
+                </Grid>
+
+                <!-- 设置项的"小说明": 光标在一格上停够一会儿(或者鼠标悬上去)才浮出来
+                     一小块, 跟 Windows 里鼠标停在文件上弹的那个黄条一个意思。
+                     **2.0.1 起整层停用**: 九格每一格都想说话, 停哪儿都弹一块, 反而碍事。
+                     东西一行没拆(想加回来只要放开 ArmSetTip 那几个调用点)。
+                     摆在整个背面的最上层(Grid.RowSpan 跨满三行 + 放在最后一个子节点),
+                     所以能盖在标题和滚动区上头; IsHitTestVisible=False 保证它不抢鼠标。 -->
+                <Canvas x:Name="SetTipLayer" Grid.Row="0" Grid.RowSpan="4"
+                        IsHitTestVisible="False" ClipToBounds="True">
+                    <Border x:Name="SetTipBox" Visibility="Collapsed" MaxWidth="330"
+                            Background="#F21E1828" CornerRadius="8"
+                            BorderBrush="#5B54A8" BorderThickness="1"
+                            Padding="10,7,10,7">
+                        <!-- 影子用不上(窗口本来就是透的), 靠边框和底色跟下面的行分开 -->
+                        <TextBlock x:Name="SetTipText" FontSize="12" Foreground="#DDDCEA"
+                                   TextWrapping="Wrap" LineHeight="18"/>
+                    </Border>
+                </Canvas>
+            </Grid>
+        </Border>
+
+        <!-- ===================== LB / RB 翻页标志(卡片外面, **左右**) =====================
+             这两个是"左右翻页"的意思, 2.1.1 从符号面板里面搬到了**框外面**;
+             **2.1.3 起凡是能翻页的页面都挂这同一对** —— 符号面板、设置页那些
+             带翻页的深层、窗口F 的列表页, 全界面翻页就只有这一种说法(见 C# 的
+             PageTurnable / Render 里那一段):
+               · 符号面板: 它们原来占着 GridCand 左右两条竖列(各 34), 搬走之后
+                 符号格能占满整个键盘区(标点本来就多, 能多摆两列是两列);
+               · 设置页 / 窗口F: 那几页**底下只有一排页码点**, 左右两侧没有任何
+                 "可以按 LB / RB"的痕迹 —— 能翻页却没提示, 头一次进去的人找不着;
+             和"滑行"那块板一个道理 —— 摆在游戏画面上时底下得垫一块深色半透明
+             板才看得清; 而摆到框外面, 它俩谁也不压着谁。
+             【为什么是负 Margin 而不是加宽卡片】这一层是 RowCard 里和正 / 背面那张
+             卡片**并排**的兄弟: 它往外各探 40, 正好落在卡片左右两边那片透明舞台里
+             (舞台 726 宽, 卡片才 414, 两边各有一百多像素富余)。卡片自己一像素都没
+             变宽 —— 加宽卡片的话, 翻到背面那张(414)时就"翻一次面窗口长一截"。
+             【为什么只此一对】它俩都住在 RowCard 这一行里、挂在**框的外面**, 而正面
+             (符号面板 / 窗口F)和背面(设置页)是同一行的两张卡、宽窄一样 ——
+             于是同一对小牌伺候三处就够, 不用设置页再抄一份。
+             这一位置一直是给它们留着的(缩放不可能被它们撑宽), 只是"当前这一页
+             只有一页"时不点亮 —— 所以打开符号面板时界面宽度一像素都不变。
+             两个 Plate 恒不显示时也不撑宽舞台: 负 Margin 不计入需求的宽度,
+             于是"打开符号面板窗口变宽一下"这种跳也不会有。 -->
+        <Grid x:Name="PageSides" Grid.Row="4" Margin="-40,0,-40,0"
+              IsHitTestVisible="False" Panel.ZIndex="300">
+            <Border x:Name="PagePlateL" Visibility="Collapsed"
+                    Background="#C20E0C16" CornerRadius="8" Padding="7,5,7,5"
+                    HorizontalAlignment="Left" VerticalAlignment="Center"
+                    Margin="0,0,0,4">
+                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                    <TextBlock x:Name="GridArrowLMark" Text="◀" FontSize="19"
+                               Foreground="#9FC7F5" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="GridArrowLLab" Text="LB" FontSize="10"
+                               Foreground="#8C8C9A" HorizontalAlignment="Center"
+                               Margin="0,1,0,0"/>
+                </StackPanel>
+            </Border>
+            <Border x:Name="PagePlateR" Visibility="Collapsed"
+                    Background="#C20E0C16" CornerRadius="8" Padding="7,5,7,5"
+                    HorizontalAlignment="Right" VerticalAlignment="Center"
+                    Margin="0,0,0,4">
+                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                    <TextBlock x:Name="GridArrowRMark" Text="▶" FontSize="19"
+                               Foreground="#9FC7F5" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="GridArrowRLab" Text="RB" FontSize="10"
+                               Foreground="#8C8C9A" HorizontalAlignment="Center"
+                               Margin="0,1,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===================== 状态行(卡片外面, **下面**) =====================
+             "滑行" 二字 / 符号面板的分类名。
+             它不属于九键那块正方形: 框是九键的边界, 而状态是整块界面的状态,
+             摆在边界外面才说得通。
+             **这一行高度恒定 26**(不跟着有没有内容变): 它在卡片**下面**,
+             一变高矮卡片就会上下跳; 而上面那些行随便缩到 0 都不影响卡片 ——
+             这就是"能收的收、不能收的钉死"那条分界线。 -->
+        <Grid x:Name="StatusDock" Grid.Row="5" Margin="0,2,0,0"
+              Width="{Binding ContentW, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type Window}}}"
+              HorizontalAlignment="Center">
+            <!-- **「滑行」「已复制」这两个字, 底下垫一块深色半透明圆角板**。
+                 它们是浮在游戏画面上的: 碰到亮背景(雪地 / 天空)字就糊在画面里看不见。
+                 板子的宽度**跟着字走**(每个 chip 各自包一层 Border, 不写 Width),
+                 一个字就一小块、四个字就宽一点 —— 不会像整行铺一条那样挡住画面。
+                 高度这边同理: Padding 给 2 就够, 再高就要顶出这 26 的行高了
+                 (这一行的高是钉死的, 见 STATUS_ROW_H)。 -->
+            <Border x:Name="SlideHintChip" Visibility="Collapsed"
+                    IsHitTestVisible="False" Background="#C20E0C16"
+                    CornerRadius="8" Padding="12,2,12,3"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="SlideHintText" Text="滑行"
+                           IsHitTestVisible="False"
+                           FontSize="17" FontWeight="SemiBold" Foreground="#E8E8F0"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <!-- 【2.1.8: 分类名这块牌子撤了】"现在在第几类"改由**符号网格正中间
+                 那一格**说(见 InputCore.GridItems)—— 眼睛本来就在网格上。 -->
+            <!-- 「已复制」: 关于页按 A 复制完, 这三个字在这儿亮一秒(见 CopyAbout)。
+                 和「滑行」同一块板、同一处位置 —— 这一行一次只摆一样东西,
+                 复制的时候人在设置页里, 不可能同时在滑行。 -->
+            <Border x:Name="CopyChip" Visibility="Collapsed"
+                    IsHitTestVisible="False" Background="#C20E0C16"
+                    CornerRadius="8" Padding="12,2,12,3"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="CopyHintText" Text="已复制" IsHitTestVisible="False"
+                           FontSize="17" FontWeight="SemiBold" Foreground="#E8E8F0"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <!-- 【彩蛋: 连点设置首页正中那个空位】第 20/40/60/80/100 次在这儿冒一句,
+                 亮一秒就没(见 Layer.TapEggCenter)。和上面两块同一块板、同一处位置 ——
+                 这一行一次只摆一样东西, 优先级: 已复制 > 彩蛋 > 滑行(见 Render)。
+                 字色在代码里统一给成 ChipInk: 板子是写死的深色, 字必须恒为浅色。 -->
+            <Border x:Name="EggChip" Visibility="Collapsed"
+                    IsHitTestVisible="False" Background="#C20E0C16"
+                    CornerRadius="8" Padding="12,2,12,3"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="EggHintText" Text="" IsHitTestVisible="False"
+                           FontSize="17" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+    </Grid>
+    </Grid>
+</Window>

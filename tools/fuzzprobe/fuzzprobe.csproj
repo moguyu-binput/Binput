@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>fuzzprobe</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <Compile Include="..\..\InputCore.cs" />
+    <Compile Include="..\..\T9Engine.cs" />
+    <Compile Include="..\..\GamepadInput.cs" />
+    <Compile Include="..\..\Keyboard26.cs" />
+    <Compile Include="..\..\TextOutput.cs" />
+    <Compile Include="..\..\ImeStatus.cs" />
+    <Compile Include="..\..\ScreenId.cs" />
+    <Compile Include="..\..\Config.cs" />
+    <Compile Include="..\..\Slide.cs" />
+    <Compile Include="..\..\Quick.cs" />
+    <Compile Include="..\..\IQuickHost.cs" />
+    <Compile Include="..\..\IQuickUI.cs" />
+
+    <Compile Include="..\..\Win32.cs" />
+    <Compile Include="..\..\FxStyle.cs" />
+    <Compile Include="..\..\KeyShape.cs" />
+    <Compile Include="..\..\ISettingsHost.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="dict.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+</Project>
