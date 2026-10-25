@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>mineprobe</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <!-- 探针不弹窗, 但 InputCore 依赖 TextOutput/Win32 这些 WPF 类型, 只能按
+         windows 目标框架 + UseWPF 编。OutputType 是 Exe 但没有 Main 冲突:
+         Program.cs 自己的 top-level 语句就是入口。 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Stubs.cs" />
+    <!-- 只拿切分和网格这一层, 不牵 OverlayWindow/App/贴图那些界面代码 -->
+    <Compile Include="..\..\InputCore.cs" />
+    <Compile Include="..\..\T9Engine.cs" />
+    <Compile Include="..\..\GamepadInput.cs" />
+    <Compile Include="..\..\Keyboard26.cs" />
+    <Compile Include="..\..\TextOutput.cs" />
+    <Compile Include="..\..\ImeStatus.cs" />
+    <Compile Include="..\..\ScreenId.cs" />
+    <Compile Include="..\..\Config.cs" />
+    <Compile Include="..\..\Slide.cs" />
+    <Compile Include="..\..\Quick.cs" />
+    <Compile Include="..\..\IQuickHost.cs" />
+    <Compile Include="..\..\IQuickUI.cs" />
+
+    <Compile Include="..\..\Win32.cs" />
+    <Compile Include="..\..\FxStyle.cs" />
+    <Compile Include="..\..\KeyShape.cs" />
+    <Compile Include="..\..\ISettingsHost.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="dict.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+</Project>

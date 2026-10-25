@@ -1,0 +1,13 @@
+词库 46389 条
+
+[726] 共 6 种 -> 前 6:  ran*  |  pan*  |  pao*  |  rao*  |  san*  |  sao*
+[7426] 共 14 种 -> 前 6:  shao*  |  qiao*  |  qian*  |  piao*  |  pian*  |  shan*
+[426] 共 4 种 -> 前 4:  hao*  |  gan*  |  gao*  |  han*
+[7468326] 共 39 种 -> 前 6:  shou'dao*  |  shou'dan  |  shou'fan  |  si'mu'dao  |  ri'mu'dao  |  qi'mu'dao
+[9426] 共 11 种 -> 前 6:  xian*  |  zhao*  |  xiao*  |  zhan*  |  yi'bo*  |  yi'an*
+[2426] 共 15 种 -> 前 6:  chao*  |  biao*  |  bian*  |  chan*  |  a'han*  |  a'gan*
+[94826] 共 12 种 -> 前 6:  zhuan*  |  yi'tao*  |  zhu'bo*  |  yi'tan  |  zi'tao  |  xi'tao
+[4864] 共 4 种 -> 前 4:  gu'ni  |  hu'ni  |  gu'mi  |  hu'mi
+[946] 共 5 种 -> 前 5:  xin*  |  yin*  |  yi'o  |  xi'o  |  zi'o
+
+(* = 词库里真有这个词)

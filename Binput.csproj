@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- 只在没指定 RuntimeIdentifier 时锁 x64(默认开发/调试产物);
+         指定了 -r win-arm64 / win-x64 时交给 SDK 从 RID 推断, 否则会报 NETSDK1032 冲突 -->
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
+    <AssemblyName>Binput</AssemblyName>
+    <RootNamespace>Binput</RootNamespace>
+    <!-- 同时决定 exe 在资源管理器/任务栏里显示的图标 -->
+    <ApplicationIcon>Binput.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- 托盘图标: 作为资源嵌进 exe, 运行时用 pack:// URI 读(见 App.LoadAppIcon)。
+       用 tools/make_icon.py 从任意图片生成。 -->
+  <ItemGroup>
+    <Resource Include="Binput.ico" />
+  </ItemGroup>
+
+  <!-- WPF + WinForms 混用时 System.Drawing 会和 System.Windows.Media 撞名(Brush/Color/Rectangle), -->
+  <!-- 这里移除隐式引入, 需要的地方用显式别名。 -->
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <!-- 【tools/ 住在仓库里之后必须加这一条】SDK 风格项目默认把 **/*.cs 全编进来,
+       而 tools/ 下那八套探针各有一份 Program.cs / Stubs.cs(而且自带 Main、
+       自带一套假的 WPF 桩类)。不排除的话主程序编译会当场撞车: 两个 Main、
+       System.Windows 那堆类型被桩类顶掉。
+       探针自己有 csproj, 它们是**被引用主程序源码**的一方, 不是主程序的一部分。 -->
+  <ItemGroup>
+    <Compile Remove="tools/**/*.cs" />
+    <None Remove="tools/**/*.cs" />
+  </ItemGroup>
+
+  <!-- 词库随程序一起输出。用 tools/build_dict.py 生成, 不存在时程序自动退回内置演示词库 -->
+  <ItemGroup>
+    <None Update="dict.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- "小天使"皮肤的贴图素材(键胶囊三段式 / 九键花瓣 / 轮盘圆片)。
+       放在程序目录的 skin\ 下而不是嵌进 exe: 方便自己换图、或者以后加第二套皮肤。
+       目录缺失时界面自动退回纯色画法, 不缺资源也不崩。 -->
+  <ItemGroup>
+    <None Update="skin\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

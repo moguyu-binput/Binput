@@ -1,0 +1,724 @@
+lines=5117  nl='\r\n'
+members=722
+   31-   34    4  UiTheme                            | public sealed record UiTheme(string Name, Color Panel, Color Key, Color Edge,
+   35-   36    2  C                                  | static Color C(int r, int g, int b) => Color.FromRgb((byte)r, (byte)g, (byte)b);
+   37-   37    1  public static readonly UiTheme[] Themes = | public static readonly UiTheme[] Themes =
+   38-   64   27  {                                  | {
+   65-   67    3  };                                 | };
+   68-   77   10  public int Theme { get; private set; } | public int Theme { get; private set; }
+   78-   87   10  public bool Fx => true;            | public bool Fx => true;
+   88-   88    1  public bool Key9Num                | public bool Key9Num
+   89-   95    7  {                                  | {
+   96-   96    1  }                                  | }
+   97-  101    5  bool _showKey9Num;                 | bool _showKey9Num;
+  102-  107    6  const double KEY9_BIG = 28, KEY9_BIG4 = 24; | const double KEY9_BIG = 28, KEY9_BIG4 = 24;
+  108-  114    7  const double KEY9_BOX = 360;       | const double KEY9_BOX = 360;
+  115-  127   13  const double KEY26_BOX_W = 640;    | const double KEY26_BOX_W = 640;
+  128-  133    6  const double PREVIEW_BOX_H = 138;  | const double PREVIEW_BOX_H = 138;
+  134-  135    2  const double STATUS_ROW_H = 26;    | const double STATUS_ROW_H = 26;
+  136-  138    3  const double STAGE_PAD = 16;       | const double STAGE_PAD = 16;
+  139-  144    6  FrameW                             | static double StageW => FrameW(KEY26_BOX_W) + OUTER_PAD_X * 2 + 2 + STAGE_PAD * 2;    // 7
+  145-  167   23  FrameH                             | static double StageH => PREVIEW_BOX_H + 48 + 46 + 34 + FrameH(KEY9_BOX) + 28
+  168-  169    2  const double CAND_ROW_H = 46;      | const double CAND_ROW_H = 46;
+  170-  171    2  const double PINYIN_ROW_H = 34;    | const double PINYIN_ROW_H = 34;
+  172-  178    7  const double SET_GAP = 4;                          | const double SET_GAP = 4;                             // 和九键那颗键一样的缝
+  179-  186    8  const double SET_CARD = KEY9_BOX;                  | const double SET_CARD = KEY9_BOX;                                              // 360
+  187-  193    7  const double SET_CELL = (SET_CARD - SET_GAP * 6) / | const double SET_CELL = (SET_CARD - SET_GAP * 6) / 3;                          // 112
+  194-  201    8  double _cellR = 10;                | double _cellR = 10;
+  202-  205    4  const double SET_PANEL_R = 12;     | const double SET_PANEL_R = 12;
+  206-  207    2  const double SOLO_FS = 13;         | const double SOLO_FS = 13;
+  208-  230   23  const double SOLO_FS_MIN = 9;      | const double SOLO_FS_MIN = 9;
+  231-  232    2  const double FRAME_PAD_X = 12;     | const double FRAME_PAD_X = 12;
+  233-  234    2  const double FRAME_PAD_TOP = 26;   | const double FRAME_PAD_TOP = 26;
+  235-  237    3  const double FRAME_PAD_BOT = 34;   | const double FRAME_PAD_BOT = 34;
+  238-  240    3  const double OUTER_PAD_X = 14, OUTER_PAD_Y = 10;   | const double OUTER_PAD_X = 14, OUTER_PAD_Y = 10;   // = 正面 XAML 里 OuterGrid 的 Margin
+  241-  241    1  FrameW                             | static double FrameW(double contentW) => contentW + FRAME_PAD_X * 2;
+  242-  249    8  FrameH                             | static double FrameH(double contentH) => contentH + FRAME_PAD_TOP + FRAME_PAD_BOT;
+  250-  250    1  BackBoxW                           | static double BackBoxW(double bw) => FrameW(SET_CARD) + OUTER_PAD_X * 2 + 2 * bw;   // 414
+  251-  264   14  BackBoxH                           | static double BackBoxH(double bw) => FrameH(SET_CARD) + OUTER_PAD_Y * 2 + 2 * bw;   // 442
+  265-  271    7  const double SLIDE_DIM = 0.72;     | const double SLIDE_DIM = 0.72;
+  272-  272    1  ApplyTheme                         | public void ApplyTheme(int i)
+  273-  470  198  {                                  | {
+  471-  473    3  }                                  | }
+  474-  480    7  Grad                               | static Brush Grad(Color top, Color bottom) =>
+  481-  481    1  GridPaper                          | static DrawingBrush GridPaper()
+  482-  496   15  {                                  | {
+  497-  500    4  }                                  | }
+  501-  501    1  SolidColorBrush                    | static Brush PanelBg = new SolidColorBrush(Color.FromArgb(0xE8, 0x14, 0x14, 0x20));
+  502-  502    1  SolidColorBrush                    | static Brush Normal = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x28));
+  503-  503    1  SolidColorBrush                    | static Brush Active = new SolidColorBrush(Color.FromRgb(0x0C, 0x44, 0x7C));
+  504-  505    2  SolidColorBrush                    | static Brush ActiveEdge = new SolidColorBrush(Color.FromRgb(0x85, 0xB7, 0xEB));
+  506-  506    1  SolidColorBrush                    | static Brush Lit = new SolidColorBrush(Color.FromRgb(0x1C, 0x34, 0x54));
+  507-  507    1  SolidColorBrush                    | static Brush LitEdge = new SolidColorBrush(Color.FromRgb(0x56, 0x86, 0xB8));
+  508-  509    2  SolidColorBrush                    | static Brush DimEdge = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x48));
+  510-  515    6  SolidColorBrush                    | static Brush EmptyEdge = new SolidColorBrush(Color.FromArgb(0x30, 0x7A, 0x7A, 0x8C));
+  516-  516    1  FromArgb                           | static Color VeilC = Color.FromArgb(0x55, 0x14, 0x14, 0x20);
+  517-  518    2  new                                | static readonly SolidColorBrush VeilBrush = new(VeilC);
+  519-  519    1  FromRgb                            | static Color AccentC = Color.FromRgb(0xFA, 0xC7, 0x75);
+  520-  523    4  FromRgb                            | static Color ActiveEdgeC = Color.FromRgb(0x85, 0xB7, 0xEB);
+  524-  524    1  new                                | static readonly SolidColorBrush Fg = new(Color.FromRgb(0xE8, 0xE8, 0xF0));
+  525-  525    1  new                                | static readonly SolidColorBrush FgHot = new(Color.FromRgb(0xE6, 0xF1, 0xFB));
+  526-  526    1  new                                | static readonly SolidColorBrush Sub = new(Color.FromRgb(0x7A, 0x7A, 0x8C));
+  527-  533    7  new                                | static readonly SolidColorBrush Accent = new(Color.FromRgb(0xFA, 0xC7, 0x75));
+  534-  535    2  new                                | static readonly SolidColorBrush OnAccent = new(Color.FromRgb(0x1A, 0x1A, 0x20));
+  536-  536    1  Luma                               | static double Luma(Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
+  537-  537    1  new                                | static readonly SolidColorBrush Pinyin = new(Color.FromRgb(0x9F, 0xC7, 0xF5));
+  538-  548   11  new                                | static readonly SolidColorBrush PinyinDim = new(Color.FromRgb(0x26, 0x22, 0x30));
+  549-  550    2  new                                | static readonly SolidColorBrush ChipInk = new(Color.FromRgb(0xEE, 0xEE, 0xF4));
+  551-  552    2  new                                | static readonly SolidColorBrush ChipSub = new(Color.FromRgb(0xA8, 0xA8, 0xBA));
+  553-  556    4  new                                | static readonly SolidColorBrush DotIdle = new(Color.FromRgb(0x4A, 0x4A, 0x5C));
+  557-  557    1  new                                | static readonly SolidColorBrush BtnBg = new(Color.FromRgb(0x33, 0x33, 0x4A));
+  558-  560    3  new                                | static readonly SolidColorBrush BtnEdge = new(Color.FromRgb(0x3C, 0x3C, 0x48));
+  561-  562    2  static bool SkinOn;                | static bool SkinOn;
+  563-  573   11  static int SkinMode;               | static int SkinMode;
+  574-  576    3  static readonly string[] Key9Sub = { "", "JKL", "A | static readonly string[] Key9Sub = { "", "JKL", "ABC", "DEF", "GHI", "快捷", "MNO", "PQRS", 
+  577-  577    1  VisualLen                          | static int VisualLen(string s)
+  578-  581    4  {                                  | {
+  582-  583    2  }                                  | }
+  584-  589    6  readonly Border[] _key9 = new Border[10]; | readonly Border[] _key9 = new Border[10];
+  590-  590    1  readonly Grid[] _key9Host = new Grid[10]; | readonly Grid[] _key9Host = new Grid[10];
+  591-  591    1  const string FLIP_HOST = "flip9";  | const string FLIP_HOST = "flip9";
+  592-  592    1  readonly TextBlock[] _key9Num = new TextBlock[10]; | readonly TextBlock[] _key9Num = new TextBlock[10];
+  593-  594    2  readonly TextBlock[] _key9Sub = new TextBlock[10]; | readonly TextBlock[] _key9Sub = new TextBlock[10];
+  595-  605   11  readonly Border[] _key9Gloss = new Border[10]; | readonly Border[] _key9Gloss = new Border[10];
+  606-  607    2  new                                | readonly Dictionary<Border, SkinBg> _skins = new();
+  608-  610    3  static readonly string[] PetalColor = | static readonly string[] PetalColor =
+  611-  611    1  readonly Border[][] _en = new Border[Keyboard26.Ro | readonly Border[][] _en = new Border[Keyboard26.RowCount][];
+  612-  613    2  readonly TextBlock[][] _enText = new TextBlock[Key | readonly TextBlock[][] _enText = new TextBlock[Keyboard26.RowCount][];
+  614-  614    1  readonly Border[] _candRow = new Border[InputCore. | readonly Border[] _candRow = new Border[InputCore.CandPerRow];
+  615-  616    2  readonly TextBlock[] _candText = new TextBlock[Inp | readonly TextBlock[] _candText = new TextBlock[InputCore.CandPerRow];
+  617-  617    1  readonly Border[] _grid = new Border[40]; | readonly Border[] _grid = new Border[40];
+  618-  620    3  readonly TextBlock[] _gridText = new TextBlock[40] | readonly TextBlock[] _gridText = new TextBlock[40];
+  621-  621    1  readonly Border[] _py = new Border[InputCore.MaxPi | readonly Border[] _py = new Border[InputCore.MaxPinyinPerRow];
+  622-  622    1  TextBlock _pyMore;                       // 拼音行末尾那 | TextBlock _pyMore;                       // 拼音行末尾那个"还有更多"的 …
+  623-  624    2  readonly TextBlock[] _pyText = new TextBlock[Input | readonly TextBlock[] _pyText = new TextBlock[InputCore.MaxPinyinPerRow];
+  625-  625    1  Ellipse _dot;                      | Ellipse _dot;
+  626-  626    1  Line _line, _crossH, _crossV;      | Line _line, _crossH, _crossV;
+  627-  627    1  Border _key0;                        // 数字层的 0, 浮在 | Border _key0;                        // 数字层的 0, 浮在 8 号键下方
+  628-  629    2  TextBlock _key0Text, _key0Sub;     | TextBlock _key0Text, _key0Sub;
+  630-  630    1  OverlayWindow                      | public OverlayWindow()
+  631-  711   81  {                                  | {
+  712-  714    3  }                                  | }
+  715-  717    3  public event Action LostActivation; | public event Action LostActivation;
+  718-  723    6  public double Scale { get; private set; } = 1.0; | public double Scale { get; private set; } = 1.0;
+  724-  724    1  public bool Preview                | public bool Preview
+  725-  741   17  {                                  | {
+  742-  742    1  }                                  | }
+  743-  745    3  bool _preview;                     | bool _preview;
+  746-  746    1  public string NoteText             | public string NoteText
+  747-  755    9  {                                  | {
+  756-  759    4  }                                  | }
+  760-  761    2  const double NOTE_LINE_H = 24;     | const double NOTE_LINE_H = 24;
+  762-  763    2  const double NOTE_PAD_V = 8;       | const double NOTE_PAD_V = 8;
+  764-  771    8  const int NOTE_MAX_LINES = 5;      | const int NOTE_MAX_LINES = 5;
+  772-  772    1  SizePreview                        | void SizePreview()
+  773-  787   15  {                                  | {
+  788-  790    3  }                                  | }
+  791-  792    2  bool _noteShown;                   | bool _noteShown;
+  793-  828   36  bool _noteAnim;                    | bool _noteAnim;
+  829-  829    1  NoteGate                           | bool NoteGate()
+  830-  855   26  {                                  | {
+  856-  858    3  }                                  | }
+  859-  860    2  DateTime _holdNoteAt;              | DateTime _holdNoteAt;
+  861-  861    1  SyncNotePanel                      | void SyncNotePanel(bool evenIfEmpty = false)
+  862-  892   31  {                                  | {
+  893-  899    7  }                                  | }
+  900-  903    4  NoteRiseDistance                   | double NoteRiseDistance() =>
+  904-  904    1  TranslateTransform                 | TranslateTransform _noteTt = new TranslateTransform();
+  905-  905    1  DateTime _noteT0;                  | DateTime _noteT0;
+  906-  906    1  double _noteMs, _noteD;            | double _noteMs, _noteD;
+  907-  917   11  bool _noteOn, _noteHooked;         | bool _noteOn, _noteHooked;
+  918-  918    1  NoteTick                           | void NoteTick(object sender, EventArgs e)
+  919-  946   28  {                                  | {
+  947-  950    4  }                                  | }
+  951-  951    1  SetRowH                            | static void SetRowH(RowDefinition r, double h)
+  952-  953    2  {                                  | {
+  954-  959    6  }                                  | }
+  960-  960    1  TakeForeground                     | public void TakeForeground()
+  961-  969    9  {                                  | {
+  970-  976    7  }                                  | }
+  977-  977    1  QuickPutNote                       | public void QuickPutNote(string text)
+  978-  984    7  {                                  | {
+  985-  986    2  }                                  | }
+  987-  998   12  WindowInteropHelper                | public IntPtr Handle => new WindowInteropHelper(this).EnsureHandle();
+  999-  999    1  SetScale                           | public void SetScale(double s)
+ 1000- 1004    5  {                                  | {
+ 1005- 1015   11  }                                  | }
+ 1016- 1016    1  SyncStageSize                      | void SyncStageSize()
+ 1017- 1025    9  {                                  | {
+ 1026- 1034    9  }                                  | }
+ 1035- 1035    1  Settle                             | void Settle(bool growStage = true)
+ 1036- 1042    7  {                                  | {
+ 1043- 1045    3  }                                  | }
+ 1046- 1052    7  public ISettingsHost Host;         | public ISettingsHost Host;
+ 1053- 1055    3  public event Action<double, double, bool> Dragged; | public event Action<double, double, bool> Dragged;
+ 1056- 1057    2  public double OffsetX, OffsetY;    | public double OffsetX, OffsetY;
+ 1058- 1059    2  Reposition                         | public void Reposition() => PositionBottomCenter();
+ 1060- 1060    1  PositionBottomCenter               | void PositionBottomCenter()
+ 1061- 1112   52  {                                  | {
+ 1113- 1119    7  }                                  | }
+ 1120- 1129   10  double _anchorDrop;                | double _anchorDrop;
+ 1130- 1130    1  CardRectInWindow                   | Rect CardRectInWindow()
+ 1131- 1148   18  {                                  | {
+ 1149- 1156    8  }                                  | }
+ 1157- 1157    1  KeyRectInWindow                    | Rect KeyRectInWindow()
+ 1158- 1161    4  {                                  | {
+ 1162- 1169    8  }                                  | }
+ 1170- 1170    1  RectOfIn                           | Rect RectOfIn(FrameworkElement e, double w, double h)
+ 1171- 1190   20  {                                  | {
+ 1191- 1195    5  }                                  | }
+ 1196- 1198    3  public bool Flipped { get; private set; } | public bool Flipped { get; private set; }
+ 1199- 1208   10  Button CornerBtn => Flipped ? BackBtn : GearBtn; | Button CornerBtn => Flipped ? BackBtn : GearBtn;
+ 1209- 1209    1  Flip                               | public void Flip(bool toBack)
+ 1210- 1247   38  {                                  | {
+ 1248- 1255    8  }                                  | }
+ 1256- 1256    1  SizeBackCard                       | void SizeBackCard()
+ 1257- 1260    4  {                                  | {
+ 1261- 1263    3  }                                  | }
+ 1264- 1264    1  ShowSide                           | void ShowSide(bool back)
+ 1265- 1322   58  {                                  | {
+ 1323- 1325    3  }                                  | }
+ 1326- 1326    1  Unflip                             | void Unflip()
+ 1327- 1330    4  {                                  | {
+ 1331- 1333    3  }                                  | }
+ 1334- 1334    1  bool _flipL;                       | bool _flipL;
+ 1335- 1340    6  DateTime _flipLAt;                 | DateTime _flipLAt;
+ 1341- 1347    7  bool _expanding;                   | bool _expanding;
+ 1348- 1350    3  bool _keyKeep;                     | bool _keyKeep;
+ 1351- 1366   16  const double EXPAND_MS = 230;      | const double EXPAND_MS = 230;
+ 1367- 1367    1  FlipLayout                         | public void FlipLayout(Action mid)
+ 1368- 1382   15  {                                  | {
+ 1383- 1385    3  }                                  | }
+ 1386- 1393    8  Layout _layoutNow = Layout.CN9;    | Layout _layoutNow = Layout.CN9;
+ 1394- 1396    3  public Func<Layout> LayoutOf;      | public Func<Layout> LayoutOf;
+ 1397- 1397    1  SetWidths                          | void SetWidths(double w)
+ 1398- 1402    5  {                                  | {
+ 1403- 1416   14  }                                  | }
+ 1417- 1417    1  TweenWidth                         | void TweenWidth(double w0, double w1, Action done, bool keepKeys = false, double fadeKeys 
+ 1418- 1489   72  {                                  | {
+ 1490- 1492    3  }                                  | }
+ 1493- 1495    3  KeyLayerOn                         | FrameworkElement KeyLayerOn() => Grid26.Visibility == Visibility.Visible ? Grid26 : Grid9;
+ 1496- 1496    1  KeyFade                            | void KeyFade(FrameworkElement layer, double from, double to, int ms)
+ 1497- 1503    7  {                                  | {
+ 1504- 1509    6  }                                  | }
+ 1510- 1510    1  KeyFadeReset                       | void KeyFadeReset()
+ 1511- 1516    6  {                                  | {
+ 1517- 1519    3  }                                  | }
+ 1520- 1520    1  EndExpand                          | void EndExpand()
+ 1521- 1526    6  {                                  | {
+ 1527- 1535    9  }                                  | }
+ 1536- 1536    1  const int DRAG_HOLD_MS = 300;   // 长按阈值: 按住这么久才算"想 | const int DRAG_HOLD_MS = 300;   // 长按阈值: 按住这么久才算"想拖"
+ 1537- 1537    1  const double DRAG_MOVE = 3;     // 长按生效后再挪这么点(屏幕像素 | const double DRAG_MOVE = 3;     // 长按生效后再挪这么点(屏幕像素)就真的开始拖
+ 1538- 1539    2  const double CLICK_SLOP = 8;    // 没按够久时, 要甩这么远才当拖 | const double CLICK_SLOP = 8;    // 没按够久时, 要甩这么远才当拖; 否则算点击
+ 1540- 1540    1  bool _down, _drag;                 | bool _down, _drag;
+ 1541- 1541    1  DateTime _downAt;                  | DateTime _downAt;
+ 1542- 1542    1  Win32.POINT _downFrom;             | Win32.POINT _downFrom;
+ 1543- 1545    3  double _ox0, _oy0;                 | double _ox0, _oy0;
+ 1546- 1547    2  bool CanDrag => !Flipped;          | bool CanDrag => !Flipped;
+ 1548- 1548    1  OnWinDown                          | void OnWinDown(object sender, MouseButtonEventArgs e)
+ 1549- 1556    8  {                                  | {
+ 1557- 1558    2  }                                  | }
+ 1559- 1559    1  OnWinMove                          | void OnWinMove(object sender, MouseEventArgs e)
+ 1560- 1586   27  {                                  | {
+ 1587- 1588    2  }                                  | }
+ 1589- 1595    7  OnWinUp                            | void OnWinUp(object sender, MouseButtonEventArgs e) => EndPress();
+ 1596- 1596    1  EndPress                           | void EndPress()
+ 1597- 1607   11  {                                  | {
+ 1608- 1610    3  }                                  | }
+ 1611- 1611    1  PxToDip                            | Point PxToDip(int dx, int dy)
+ 1612- 1615    4  {                                  | {
+ 1616- 1623    8  }                                  | }
+ 1624- 1624    1  HitTestTick                        | public void HitTestTick()
+ 1625- 1636   12  {                                  | {
+ 1637- 1637    1  }                                  | }
+ 1638- 1640    3  bool _overCorner;                  | bool _overCorner;
+ 1641- 1643    3  const double CORNER_HOVER = 1.22;  | const double CORNER_HOVER = 1.22;
+ 1644- 1644    1  SetCornerHover                     | void SetCornerHover(bool on)
+ 1645- 1646    2  {                                  | {
+ 1647- 1648    2  }                                  | }
+ 1649- 1649    1  ZoomTo                             | static void ZoomTo(FrameworkElement e, double to)
+ 1650- 1661   12  {                                  | {
+ 1662- 1663    2  }                                  | }
+ 1664- 1664    1  PointerOverCorner                  | bool PointerOverCorner()
+ 1665- 1673    9  {                                  | {
+ 1674- 1689   16  }                                  | }
+ 1690- 1691    2  new                                | readonly LayerHost _set = new();
+ 1692- 1693    2  new                                | readonly LayerHost _qk = new();
+ 1694- 1694    1  List<SetPage> _setStack => _set.Pages; | List<SetPage> _setStack => _set.Pages;
+ 1695- 1695    1  Border _veil { get => _set.Veil; set => _set.Veil  | Border _veil { get => _set.Veil; set => _set.Veil = value; }
+ 1696- 1696    1  Image _veilImg { get => _set.VeilImg; set => _set. | Image _veilImg { get => _set.VeilImg; set => _set.VeilImg = value; }
+ 1697- 1697    1  bool _setAnim { get => _set.Anim; set => _set.Anim | bool _setAnim { get => _set.Anim; set => _set.Anim = value; }
+ 1698- 1698    1  Border _setCellCur { get => _set.Cur; set => _set. | Border _setCellCur { get => _set.Cur; set => _set.Cur = value; }
+ 1699- 1699    1  bool _setDown { get => _set.Down; set => _set.Down | bool _setDown { get => _set.Down; set => _set.Down = value; }
+ 1700- 1707    8  bool _setStickNav { get => _set.StickNav; set => _ | bool _setStickNav { get => _set.StickNav; set => _set.StickNav = value; }
+ 1708- 1708    1  int _tipIdx = -1;         // 计时器认的是哪一格; 光标一走就重置 | int _tipIdx = -1;         // 计时器认的是哪一格; 光标一走就重置
+ 1709- 1709    1  DateTime _tipAt;          // 认住这一行的时刻 | DateTime _tipAt;          // 认住这一行的时刻
+ 1710- 1710    1  bool _tipShown;           // 这一行的说明已经弹出来了(重复调用别再挪一 | bool _tipShown;           // 这一行的说明已经弹出来了(重复调用别再挪一次位置)
+ 1711- 1711    1  bool _tipMouse;           // 这次是鼠标悬停认住的行(那就别被手柄光标抢 | bool _tipMouse;           // 这次是鼠标悬停认住的行(那就别被手柄光标抢回去)
+ 1712- 1715    4  const int SET_TIP_DELAY = 650;     | const int SET_TIP_DELAY = 650;
+ 1716- 1716    1  static readonly string[] VerNames = { "预输入版", "直出版 | static readonly string[] VerNames = { "预输入版", "直出版" };
+ 1717- 1717    1  static readonly string[] VerTips = | static readonly string[] VerTips =
+ 1718- 1721    4  {                                  | {
+ 1722- 1726    5  };                                 | };
+ 1727- 1727    1  static readonly string[] SwapNames = | static readonly string[] SwapNames =
+ 1728- 1730    3  {                                  | {
+ 1731- 1731    1  };                                 | };
+ 1732- 1732    1  static readonly string[] SwapTips = | static readonly string[] SwapTips =
+ 1733- 1739    7  {                                  | {
+ 1740- 1746    7  };                                 | };
+ 1747- 1747    1  static readonly string[] DwellTips = | static readonly string[] DwellTips =
+ 1748- 1777   30  {                                  | {
+ 1778- 1780    3  };                                 | };
+ 1781- 1781    1  static readonly string[] DwellFeels = | static readonly string[] DwellFeels =
+ 1782- 1784    3  {                                  | {
+ 1785- 1806   22  };                                 | };
+ 1807- 1809    3  Grid _setGrid => _set.Grid;                     // | Grid _setGrid => _set.Grid;                     // 现在这一页那个 3×n 的格子容器
+ 1810- 1812    3  TopOf                              | static SetPage TopOf(LayerHost h) => h.Top;
+ 1813- 1814    2  TopOf                              | SetPage TopPage => TopOf(_set);
+ 1815- 1816    2  SlotsOf                            | static int SlotsOf(SetPage p) => SetNav.SlotsOf(p);
+ 1817- 1818    2  PagesOf                            | static int PagesOf(SetPage p) => SetNav.PagesOf(p);
+ 1819- 1820    2  BaseOf                             | static int BaseOf(SetPage p) => SetNav.BaseOf(p);
+ 1821- 1822    2  CellAt                             | static SetCell CellAt(SetPage p, int i) => SetNav.CellAt(p, i);
+ 1823- 1824    2  Landable                           | static bool Landable(SetPage p, int i) => SetNav.Landable(p, i);
+ 1825- 1835   11  Cell                               | static SetCell Cell(string title, string note = "", Action act = null,
+ 1836- 1836    1  PageRoot                           | SetPage PageRoot() => new SetPage
+ 1837- 1859   23  {                                  | {
+ 1860- 1864    5  };                                 | };
+ 1865- 1865    1  PageVer                            | SetPage PageVer() => new SetPage
+ 1866- 1874    9  {                                  | {
+ 1875- 1876    2  };                                 | };
+ 1877- 1877    1  PageTier                           | SetPage PageTier() => new SetPage
+ 1878- 1892   15  {                                  | {
+ 1893- 1894    2  };                                 | };
+ 1895- 1895    1  PageSkin                           | SetPage PageSkin() => new SetPage
+ 1896- 1911   16  {                                  | {
+ 1912- 1913    2  };                                 | };
+ 1914- 1914    1  PageKey                            | SetPage PageKey() => new SetPage
+ 1915- 1930   16  {                                  | {
+ 1931- 1932    2  };                                 | };
+ 1933- 1933    1  PageKey9Num                        | SetPage PageKey9Num() => new SetPage
+ 1934- 1942    9  {                                  | {
+ 1943- 1944    2  };                                 | };
+ 1945- 1945    1  PageSwap                           | SetPage PageSwap() => new SetPage
+ 1946- 1963   18  {                                  | {
+ 1964- 1965    2  };                                 | };
+ 1966- 1966    1  PageSlide                          | SetPage PageSlide() => new SetPage
+ 1967- 1981   15  {                                  | {
+ 1982- 1983    2  };                                 | };
+ 1984- 1984    1  PageDwell                          | SetPage PageDwell() => new SetPage
+ 1985- 2000   16  {                                  | {
+ 2001- 2002    2  };                                 | };
+ 2003- 2003    1  PageWake                           | SetPage PageWake() => new SetPage
+ 2004- 2019   16  {                                  | {
+ 2020- 2021    2  };                                 | };
+ 2022- 2022    1  PageWakeKb                         | SetPage PageWakeKb() => new SetPage
+ 2023- 2037   15  {                                  | {
+ 2038- 2039    2  };                                 | };
+ 2040- 2040    1  PageWakePad                        | SetPage PageWakePad() => new SetPage
+ 2041- 2057   17  {                                  | {
+ 2058- 2059    2  };                                 | };
+ 2060- 2060    1  PageData                           | SetPage PageData() => new SetPage
+ 2061- 2071   11  {                                  | {
+ 2072- 2073    2  };                                 | };
+ 2074- 2074    1  PageKeep                           | SetPage PageKeep() => new SetPage
+ 2075- 2085   11  {                                  | {
+ 2086- 2098   13  };                                 | };
+ 2099- 2099    1  PageAbout                          | SetPage PageAbout() => new SetPage
+ 2100- 2109   10  {                                  | {
+ 2110- 2112    3  };                                 | };
+ 2113- 2115    3  const int COPY_HINT_MS = 1000;     | const int COPY_HINT_MS = 1000;
+ 2116- 2122    7  DateTime _copyUntil = DateTime.MinValue; | DateTime _copyUntil = DateTime.MinValue;
+ 2123- 2123    1  CopyAbout                          | void CopyAbout()
+ 2124- 2128    5  {                                  | {
+ 2129- 2131    3  }                                  | }
+ 2132- 2132    1  SetPreview                         | void SetPreview(bool on) { if (Host != null) { Host.Preview = on; RefreshSettings(); } }
+ 2133- 2133    1  SetKey9Num                         | void SetKey9Num(bool on) { if (Host != null) { Host.Key9Num = on; RefreshSettings(); } }
+ 2134- 2147   14  SetSlide                           | void SetSlide(SlideMode m) { if (Host != null) { Host.SlideMode = m; RefreshSettings(); } 
+ 2148- 2148    1  BuildSettingsSide                  | void BuildSettingsSide()
+ 2149- 2157    9  {                                  | {
+ 2158- 2160    3  }                                  | }
+ 2161- 2161    1  PushPage                           | void PushPage(LayerHost h, SetPage page, bool animate, int home = -1)
+ 2162- 2164    3  {                                  | {
+ 2165- 2167    3  }                                  | }
+ 2168- 2178   11  PopPage                            | void PopPage(LayerHost h, bool animate) => ShowPage(h, animate, -1);
+ 2179- 2179    1  ShowPage                           | void ShowPage(LayerHost h, bool animate, int home)
+ 2180- 2201   22  {                                  | {
+ 2202- 2204    3  }                                  | }
+ 2205- 2205    1  DropPanel                          | void DropPanel(LayerHost h)
+ 2206- 2210    5  {                                  | {
+ 2211- 2217    7  }                                  | }
+ 2218- 2218    1  RefreshPage                        | void RefreshPage(LayerHost h)
+ 2219- 2225    7  {                                  | {
+ 2226- 2228    3  }                                  | }
+ 2229- 2229    1  FillPanel                          | void FillPanel(LayerHost h)
+ 2230- 2258   29  {                                  | {
+ 2259- 2266    8  }                                  | }
+ 2267- 2267    1  PaintChrome                        | void PaintChrome()
+ 2268- 2272    5  {                                  | {
+ 2273- 2275    3  }                                  | }
+ 2276- 2276    1  PaintDots                          | void PaintDots(StackPanel bar, int pages, int cur)
+ 2277- 2295   19  {                                  | {
+ 2296- 2311   16  }                                  | }
+ 2312- 2312    1  MakePanel                          | Border MakePanel(SetPage page, out Grid grid)
+ 2313- 2346   34  {                                  | {
+ 2347- 2350    4  }                                  | }
+ 2351- 2351    1  MakeCellBox                        | Border MakeCellBox(LayerHost h, SetPage page, SetCell cell, int i)
+ 2352- 2494  143  {                                  | {
+ 2495- 2497    3  }                                  | }
+ 2498- 2498    1  sealed class CellVis               | sealed class CellVis
+ 2499- 2502    4  {                                  | {
+ 2503- 2504    2  }                                  | }
+ 2505- 2505    1  PaintPanel                         | void PaintPanel(LayerHost h)
+ 2506- 2568   63  {                                  | {
+ 2569- 2575    7  }                                  | }
+ 2576- 2576    1  SyncCellPop                        | void SyncCellPop(LayerHost h, SetPage page, List<Border> boxes)
+ 2577- 2582    6  {                                  | {
+ 2583- 2585    3  }                                  | }
+ 2586- 2586    1  Land                               | void Land(LayerHost h, SetPage p, int i)
+ 2587- 2589    3  {                                  | {
+ 2590- 2591    2  }                                  | }
+ 2592- 2594    3  FirstLandable                      | static int FirstLandable(SetPage p) => SetNav.FirstLandable(p);
+ 2595- 2608   14  HomeSlot                           | static int HomeSlot(SetPage p) => SetNav.HomeSlot(p);
+ 2609- 2609    1  EntrySlot                          | static int EntrySlot(LayerHost h, SetPage p, int home = -1)
+ 2610- 2620   11  {                                  | {
+ 2621- 2623    3  }                                  | }
+ 2624- 2630    7  Clamp                              | static void Clamp(SetPage p) => SetNav.Clamp(p);
+ 2631- 2632    2  const double SET_POP = 1.14;      // 选中的那一格放大多少(和九 | const double SET_POP = 1.14;      // 选中的那一格放大多少(和九键焦点那颗一样)
+ 2633- 2635    3  const double CELL_WOBBLE = 4.5;    | const double CELL_WOBBLE = 4.5;
+ 2636- 2640    5  TilePx                             | static double TilePx(SetPage p, int slot) =>
+ 2641- 2643    3  PopOf                              | static double PopOf(SetPage p, int slot) => 1 + (SET_POP - 1) * SET_CELL / TilePx(p, slot)
+ 2644- 2651    8  WobOf                              | static double WobOf(SetPage p, int slot) => CELL_WOBBLE * SET_CELL / TilePx(p, slot);
+ 2652- 2652    1  FitTitle                           | static void FitTitle(TextBlock t, double w, double h)
+ 2653- 2665   13  {                                  | {
+ 2666- 2667    2  }                                  | }
+ 2668- 2668    1  static                             | static (ScaleTransform, RotateTransform) CellTf(Border b)
+ 2669- 2680   12  {                                  | {
+ 2681- 2693   13  }                                  | }
+ 2694- 2694    1  CellPop                            | void CellPop(Border b, SetPage page, int slot)
+ 2695- 2728   34  {                                  | {
+ 2729- 2735    7  }                                  | }
+ 2736- 2736    1  static                             | static (ScaleTransform, RotateTransform, TranslateTransform) SideTf(Border b)
+ 2737- 2749   13  {                                  | {
+ 2750- 2758    9  }                                  | }
+ 2759- 2759    1  PageTurnFx                         | public void PageTurnFx(int delta)
+ 2760- 2805   46  {                                  | {
+ 2806- 2808    3  }                                  | }
+ 2809- 2809    1  CellRest                           | void CellRest(Border b)
+ 2810- 2820   11  {                                  | {
+ 2821- 2826    6  }                                  | }
+ 2827- 2827    1  SetCellDown                        | void SetCellDown(LayerHost h, bool down)
+ 2828- 2841   14  {                                  | {
+ 2842- 2847    6  }                                  | }
+ 2848- 2848    1  ResetCellScale                     | void ResetCellScale(LayerHost h)
+ 2849- 2864   16  {                                  | {
+ 2865- 2872    8  }                                  | }
+ 2873- 2875    3  CanNav                             | bool CanNav(LayerHost h) => !h.Anim && h.Count > 0 && h.Panel != null && h.Active();
+ 2876- 2878    3  SettingsNav                        | public void SettingsNav(int d) => MoveSel(_set, d * 3);
+ 2879- 2880    2  SettingsNavH                       | public void SettingsNavH(int d) => MoveSel(_set, d);
+ 2881- 2881    1  MoveSel                            | void MoveSel(LayerHost h, int d)
+ 2882- 2907   26  {                                  | {
+ 2908- 2913    6  }                                  | }
+ 2914- 2919    6  SettingsStick                      | public void SettingsStick(double nx, double ny) => LayerStick(_set, nx, ny);
+ 2920- 2920    1  LayerStick                         | void LayerStick(LayerHost h, double nx, double ny)
+ 2921- 2950   30  {                                  | {
+ 2951- 2958    8  }                                  | }
+ 2959- 2966    8  SettingsActivate                   | public void SettingsActivate() => LayerActivate(_set, RefreshSettings);
+ 2967- 2967    1  LayerActivate                      | void LayerActivate(LayerHost h, Action refresh)
+ 2968- 2984   17  {                                  | {
+ 2985- 2986    2  }                                  | }
+ 2987- 2992    6  SettingsBack                       | public bool SettingsBack(bool toRoot) => LayerBack(_set, toRoot, RefreshSettings);
+ 2993- 2993    1  LayerBack                          | bool LayerBack(LayerHost h, bool toRoot, Action refresh)
+ 2994- 3006   13  {                                  | {
+ 3007- 3009    3  }                                  | }
+ 3010- 3012    3  public int SettingsDepth => _set.Count; | public int SettingsDepth => _set.Count;
+ 3013- 3014    2  SettingsPage                       | public void SettingsPage(int d) => LayerPage(_set, d);
+ 3015- 3015    1  LayerPage                          | void LayerPage(LayerHost h, int d)
+ 3016- 3018    3  {                                  | {
+ 3019- 3020    2  }                                  | }
+ 3021- 3021    1  FlipPage                           | void FlipPage(LayerHost h, int d)
+ 3022- 3030    9  {                                  | {
+ 3031- 3033    3  }                                  | }
+ 3034- 3034    1  RefreshSettingsSide                | void RefreshSettingsSide()
+ 3035- 3038    4  {                                  | {
+ 3039- 3041    3  }                                  | }
+ 3042- 3044    3  RefreshSettings                    | public void RefreshSettings() => RefreshSettingsSide();
+ 3045- 3046    2  ResetSettingsCursor                | public void ResetSettingsCursor() => ResetLayerCursor(_set);
+ 3047- 3047    1  ResetLayerCursor                   | void ResetLayerCursor(LayerHost h)
+ 3048- 3050    3  {                                  | {
+ 3051- 3067   17  }                                  | }
+ 3068- 3070    3  int _qSlot = -1;                   | int _qSlot = -1;
+ 3071- 3076    6  bool _qkOn;                        | bool _qkOn;
+ 3077- 3079    3  bool _qkFocus;                     | bool _qkFocus;
+ 3080- 3085    6  public IQuickHost QHost;           | public IQuickHost QHost;
+ 3086- 3086    1  int IQuickUI.Depth => _qk.Count;   | int IQuickUI.Depth => _qk.Count;
+ 3087- 3087    1  string IQuickUI.Layer => _qk.Top?.Title ?? ""; | string IQuickUI.Layer => _qk.Top?.Title ?? "";
+ 3088- 3088    1  Nav                                | void IQuickUI.Nav(int d) => MoveSel(_qk, d * 3);
+ 3089- 3089    1  NavH                               | void IQuickUI.NavH(int d) => MoveSel(_qk, d);
+ 3090- 3090    1  Stick                              | void IQuickUI.Stick(double x, double y) => LayerStick(_qk, x, y);
+ 3091- 3091    1  Page                               | void IQuickUI.Page(int d) => LayerPage(_qk, d);
+ 3092- 3092    1  Pick                               | void IQuickUI.Pick() => QuickPickSel();
+ 3093- 3093    1  Deep                               | void IQuickUI.Deep() => QuickDeep();
+ 3094- 3094    1  Back                               | bool IQuickUI.Back(bool toRoot) => LayerBack(_qk, toRoot, RefreshQuickSide);
+ 3095- 3097    3  Refresh                            | void IQuickUI.Refresh() => RefreshQuickSide();
+ 3098- 3098    1  Pop                                | void IQuickUI.Pop()
+ 3099- 3100    2  {                                  | {
+ 3101- 3106    6  }                                  | }
+ 3107- 3116   10  StageOff                           | void IQuickUI.StageOff() { _qkOn = false; }
+ 3117- 3122    6  StageOn                            | void IQuickUI.StageOn() { _qkOn = true; }
+ 3123- 3123    1  QuickPickSel                       | void QuickPickSel()
+ 3124- 3132    9  {                                  | {
+ 3133- 3138    6  }                                  | }
+ 3139- 3139    1  QuickDeep                          | public void QuickDeep()
+ 3140- 3151   12  {                                  | {
+ 3152- 3154    3  }                                  | }
+ 3155- 3157    3  Move                               | void IQuickUI.Move(int slot) { _qSlot = slot; }
+ 3158- 3158    1  L3                                 | void IQuickUI.L3()
+ 3159- 3162    4  {                                  | {
+ 3163- 3171    9  }                                  | }
+ 3172- 3172    1  QuickListPage                      | SetPage QuickListPage() => new SetPage
+ 3173- 3188   16  {                                  | {
+ 3189- 3197    9  };                                 | };
+ 3198- 3198    1  QuickDeepPage                      | SetPage QuickDeepPage() => new SetPage
+ 3199- 3230   32  {                                  | {
+ 3231- 3237    7  };                                 | };
+ 3238- 3238    1  QuickNumPage                       | SetPage QuickNumPage() => new SetPage
+ 3239- 3256   18  {                                  | {
+ 3257- 3264    8  };                                 | };
+ 3265- 3265    1  QuickBar                           | Border QuickBar(int slot)
+ 3266- 3291   26  {                                  | {
+ 3292- 3299    8  }                                  | }
+ 3300- 3300    1  BuildQuickSide                     | void BuildQuickSide(double sx = 0, double sy = 0)
+ 3301- 3322   22  {                                  | {
+ 3323- 3329    7  }                                  | }
+ 3330- 3330    1  PaintQuickChrome                   | void PaintQuickChrome()
+ 3331- 3335    5  {                                  | {
+ 3336- 3338    3  }                                  | }
+ 3339- 3339    1  RefreshQuickSide                   | void RefreshQuickSide()
+ 3340- 3342    3  {                                  | {
+ 3343- 3357   15  }                                  | }
+ 3358- 3359    2  const int SET_ANIM_MS = 180;       | const int SET_ANIM_MS = 180;
+ 3360- 3360    1  TfGroup                            | static TransformGroup TfGroup(FrameworkElement b)
+ 3361- 3368    8  {                                  | {
+ 3369- 3370    2  }                                  | }
+ 3371- 3371    1  static                             | static (ScaleTransform, TranslateTransform) Parts(FrameworkElement b)
+ 3372- 3374    3  {                                  | {
+ 3375- 3377    3  }                                  | }
+ 3378- 3378    1  RiseIn                             | void RiseIn(LayerHost h, Border panel)
+ 3379- 3389   11  {                                  | {
+ 3390- 3399   10  }                                  | }
+ 3400- 3400    1  PopSetPanel                        | void PopSetPanel()
+ 3401- 3410   10  {                                  | {
+ 3411- 3419    9  }                                  | }
+ 3420- 3420    1  PopKeyPanel                        | void PopKeyPanel()
+ 3421- 3428    8  {                                  | {
+ 3429- 3436    8  }                                  | }
+ 3437- 3437    1  SinkLeave                          | void SinkLeave(LayerHost h)
+ 3438- 3449   12  {                                  | {
+ 3450- 3458    9  }                                  | }
+ 3459- 3459    1  EnsureVeil                         | void EnsureVeil(LayerHost h)
+ 3460- 3495   36  {                                  | {
+ 3496- 3498    3  }                                  | }
+ 3499- 3499    1  ClipVeil                           | void ClipVeil(LayerHost h)
+ 3500- 3504    5  {                                  | {
+ 3505- 3507    3  }                                  | }
+ 3508- 3508    1  Snapshot                           | BitmapSource Snapshot(LayerHost h)
+ 3509- 3520   12  {                                  | {
+ 3521- 3527    7  }                                  | }
+ 3528- 3528    1  ShowLeave                          | void ShowLeave(LayerHost h, BitmapSource snap)
+ 3529- 3546   18  {                                  | {
+ 3547- 3548    2  }                                  | }
+ 3549- 3549    1  HideVeil                           | void HideVeil(LayerHost h)
+ 3550- 3557    8  {                                  | {
+ 3558- 3569   12  }                                  | }
+ 3570- 3572    3  static readonly bool SET_TIP_ON = false; | static readonly bool SET_TIP_ON = false;
+ 3573- 3573    1  ArmSetTip                          | void ArmSetTip(int idx, bool byMouse = false)
+ 3574- 3582    9  {                                  | {
+ 3583- 3584    2  }                                  | }
+ 3585- 3585    1  HideSetTip                         | void HideSetTip()
+ 3586- 3588    3  {                                  | {
+ 3589- 3590    2  }                                  | }
+ 3591- 3591    1  TickSetTip                         | void TickSetTip()
+ 3592- 3607   16  {                                  | {
+ 3608- 3609    2  }                                  | }
+ 3610- 3610    1  ShowSetTip                         | void ShowSetTip(Border row, string text)
+ 3611- 3623   13  {                                  | {
+ 3624- 3626    3  }                                  | }
+ 3627- 3627    1  UseSummary                         | string UseSummary()
+ 3628- 3636    9  {                                  | {
+ 3637- 3639    3  }                                  | }
+ 3640- 3650   11  WakeKeys                           | string WakeKeys() => Host?.WakeKeys() ?? "L3 + R3";
+ 3651- 3651    1  SkinWrap                           | UIElement SkinWrap(Border owner, UIElement content, string color)
+ 3652- 3660    9  {                                  | {
+ 3661- 3663    3  }                                  | }
+ 3664- 3664    1  BuildKey9                          | void BuildKey9()
+ 3665- 3705   41  {                                  | {
+ 3706- 3723   18  }                                  | }
+ 3724- 3724    1  const double KEY26_U = 38;    // 标准键宽(像素, 未缩放) | const double KEY26_U = 38;    // 标准键宽(像素, 未缩放)
+ 3725- 3726    2  const double KEY26_H = 40;    // 键高 | const double KEY26_H = 40;    // 键高
+ 3727- 3727    1  BuildKey26                         | void BuildKey26()
+ 3728- 3762   35  {                                  | {
+ 3763- 3764    2  }                                  | }
+ 3765- 3765    1  BuildCandRow                       | void BuildCandRow()
+ 3766- 3775   10  {                                  | {
+ 3776- 3777    2  }                                  | }
+ 3778- 3778    1  BuildCandGrid                      | void BuildCandGrid()
+ 3779- 3793   15  {                                  | {
+ 3794- 3795    2  }                                  | }
+ 3796- 3796    1  BuildStickLayer                    | void BuildStickLayer()
+ 3797- 3805    9  {                                  | {
+ 3806- 3807    2  }                                  | }
+ 3808- 3808    1  BuildPinyinRow                     | void BuildPinyinRow()
+ 3809- 3846   38  {                                  | {
+ 3847- 3849    3  }                                  | }
+ 3850- 3850    1  BuildZeroKey                       | void BuildZeroKey()
+ 3851- 3871   21  {                                  | {
+ 3872- 3873    2  }                                  | }
+ 3874- 3874    1  Box                                | static Border Box(double radius) => new()
+ 3875- 3880    6  {                                  | {
+ 3881- 3887    7  };                                 | };
+ 3888- 3888    1  KeyBox                             | static Border KeyBox(double w, double h) => new()
+ 3889- 3895    7  {                                  | {
+ 3896- 3897    2  };                                 | };
+ 3898- 3898    1  Text                               | static TextBlock Text(double size, Brush fg) => new()
+ 3899- 3903    5  {                                  | {
+ 3904- 3923   20  };                                 | };
+ 3924- 3925    2  const string FACE_LET = "let", FACE_NUM = "num", F | const string FACE_LET = "let", FACE_NUM = "num", FACE_PUNCT = "punct", FACE_SLIDE = "slide
+ 3926- 3927    2  const double FLIP_HALF_MS = 65;    | const double FLIP_HALF_MS = 65;
+ 3928- 3929    2  const double FLIP_STEP_MS = 32;    | const double FLIP_STEP_MS = 32;
+ 3930- 3931    2  string _faceNow = FACE_LET + "0", _facePrev = FACE | string _faceNow = FACE_LET + "0", _facePrev = FACE_LET + "0";
+ 3932- 3934    3  readonly DateTime[] _keyFlipAt = new DateTime[10]; | readonly DateTime[] _keyFlipAt = new DateTime[10];
+ 3935- 3937    3  WaveOf                             | static int WaveOf(int i) => Math.Max((i - 1) / 3, (i - 1) % 3);
+ 3938- 3940    3  FaceOf9                            | string FaceOf9(int i) => DateTime.Now >= _keyFlipAt[i] ? _faceNow : _facePrev;
+ 3941- 3941    1  SetFace9                           | void SetFace9(string face)
+ 3942- 3952   11  {                                  | {
+ 3953- 3960    8  }                                  | }
+ 3961- 3961    1  AnimateFlip9                       | void AnimateFlip9(int i, int wave)
+ 3962- 3982   21  {                                  | {
+ 3983- 3994   12  }                                  | }
+ 3995- 3995    1  PageTurnable                       | bool PageTurnable(InputCore c, bool punctGrid)
+ 3996- 4002    7  {                                  | {
+ 4003- 4004    2  }                                  | }
+ 4005- 4005    1  Render                             | public void Render(InputCore c)
+ 4006- 4431  426  {                                  | {
+ 4432- 4434    3  }                                  | }
+ 4435- 4435    1  const double PY_CHROME = 26;       | const double PY_CHROME = 26;
+ 4436- 4442    7  string _fitKey = ""; int _fitVal = InputCore.Pinyi | string _fitKey = ""; int _fitVal = InputCore.PinyinPerRow;
+ 4443- 4443    1  MeasurePinyinFit                   | int MeasurePinyinFit(InputCore c)
+ 4444- 4487   44  {                                  | {
+ 4488- 4489    2  }                                  | }
+ 4490- 4490    1  Paint                              | void Paint(Border b, bool on, TextBlock main, TextBlock sub, bool lit = false)
+ 4491- 4556   66  {                                  | {
+ 4557- 4562    6  }                                  | }
+ 4563- 4563    1  Border _fxCur;                     | Border _fxCur;
+ 4564- 4565    2  string _fxId = "";                 | string _fxId = "";
+ 4566- 4578   13  bool _fxPressed;                   | bool _fxPressed;
+ 4579- 4584    6  const ushort PRESS_MASK = GamepadInput.A; | const ushort PRESS_MASK = GamepadInput.A;
+ 4585- 4587    3  const double PRESS_SCALE = 0.88;   | const double PRESS_SCALE = 0.88;
+ 4588- 4590    3  const double PRESS_DIM = 0.5;      | const double PRESS_DIM = 0.5;
+ 4591- 4591    1  new                                | static readonly DropShadowEffect FxShadow = new()
+ 4592- 4593    2  {                                  | {
+ 4594- 4597    4  };                                 | };
+ 4598- 4598    1  new                                | static readonly DropShadowEffect FxGlow = new()
+ 4599- 4600    2  {                                  | {
+ 4601- 4603    3  };                                 | };
+ 4604- 4604    1  new                                | static readonly DropShadowEffect FxPanel = new()
+ 4605- 4606    2  {                                  | {
+ 4607- 4610    4  };                                 | };
+ 4611- 4611    1  new                                | static readonly DropShadowEffect FxOutline = new()
+ 4612- 4613    2  {                                  | {
+ 4614- 4616    3  };                                 | };
+ 4617- 4617    1  Frost                              | static Brush Frost()
+ 4618- 4630   13  {                                  | {
+ 4631- 4637    7  }                                  | }
+ 4638- 4638    1  FxSet                              | void FxSet(string id, Border b, double scale = 1.14, bool down = false)
+ 4639- 4653   15  {                                  | {
+ 4654- 4660    7  }                                  | }
+ 4661- 4661    1  FxDown                             | void FxDown(Border b, bool down, double scale)
+ 4662- 4673   12  {                                  | {
+ 4674- 4681    8  }                                  | }
+ 4682- 4682    1  FxPop                              | void FxPop(Border b, double scale)
+ 4683- 4725   43  {                                  | {
+ 4726- 4728    3  }                                  | }
+ 4729- 4729    1  FxRest                             | void FxRest(Border b)
+ 4730- 4744   15  {                                  | {
+ 4745- 4746    2  }                                  | }
+ 4747- 4747    1  UpdateStick                        | void UpdateStick(InputCore c)
+ 4748- 4759   12  {                                  | {
+ 4760- 4761    2  }                                  | }
+ 4762- 4762    1  UpdateZeroKey                      | void UpdateZeroKey(InputCore c, bool pressed = false)
+ 4763- 4774   12  {                                  | {
+ 4775- 4777    3  }                                  | }
+ 4778- 4778    1  const int GWL_EXSTYLE = -20;       | const int GWL_EXSTYLE = -20;
+ 4779- 4779    1  const int WS_EX_NOACTIVATE = 0x08000000; | const int WS_EX_NOACTIVATE = 0x08000000;
+ 4780- 4780    1  const int WS_EX_TOOLWINDOW = 0x00000080; | const int WS_EX_TOOLWINDOW = 0x00000080;
+ 4781- 4782    2  const int WS_EX_TRANSPARENT = 0x00000020; | const int WS_EX_TRANSPARENT = 0x00000020;
+ 4783- 4783    1  OnSourceInitialized                | protected override void OnSourceInitialized(EventArgs e)
+ 4784- 4791    8  {                                  | {
+ 4792- 4800    9  }                                  | }
+ 4801- 4801    1  ApplyExStyle                       | void ApplyExStyle(bool log = true)
+ 4802- 4831   30  {                                  | {
+ 4832- 4834    3  }                                  | }
+ 4835- 4843    9  int _lastEx = int.MinValue;        | int _lastEx = int.MinValue;
+ 4844- 4844    1  NudgeComposition                   | void NudgeComposition()
+ 4845- 4854   10  {                                  | {
+ 4855- 4856    2  }                                  | }
+ 4857- 4859    3  const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x000 | const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004,
+ 4860- 4860    1  DllImport                          | [DllImport("user32.dll")]
+ 4861- 4863    3  SetWindowPos                       | static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+ 4864- 4864    1  DllImport                          | [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+ 4865- 4865    1  GetWindowLongPtr64                 | static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+ 4866- 4866    1  DllImport                          | [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+ 4867- 4867    1  GetWindowLongPtr32                 | static extern IntPtr GetWindowLongPtr32(IntPtr hWnd, int nIndex);
+ 4868- 4870    3  GetWindowLongPtr                   | static IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex) =>
+ 4871- 4871    1  DllImport                          | [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
+ 4872- 4872    1  SetWindowLongPtr64                 | static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, int dwNewLong);
+ 4873- 4873    1  DllImport                          | [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+ 4874- 4874    1  SetWindowLongPtr32                 | static extern IntPtr SetWindowLongPtr32(IntPtr hWnd, int nIndex, int dwNewLong);
+ 4875- 4879    5  SetWindowLongPtr                   | static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, int dwNewLong) =>
+ 4880- 4881    2  bool _holdOff;                     | bool _holdOff;
+ 4882- 4882    1  bool _holdRendered;                | bool _holdRendered;
+ 4883- 4883    1  int _holdFrames;                   | int _holdFrames;
+ 4884- 4885    2  DateTime _holdAt;                  | DateTime _holdAt;
+ 4886- 4901   16  int _holdGen;                      | int _holdGen;
+ 4902- 4902    1  ShowReady                          | public void ShowReady()
+ 4903- 4949   47  {                                  | {
+ 4950- 4963   14  }                                  | }
+ 4964- 4964    1  HoldFade                           | void HoldFade(double v)
+ 4965- 4966    2  {                                  | {
+ 4967- 4969    3  }                                  | }
+ 4970- 4972    3  public Action OnShown;             | public Action OnShown;
+ 4973- 4973    1  ReleaseHold                        | void ReleaseHold()
+ 4974- 4988   15  {                                  | {
+ 4989- 4994    6  }                                  | }
+ 4995- 4995    1  KickCompositionLater               | void KickCompositionLater()
+ 4996- 5006   11  {                                  | {
+ 5007- 5009    3  }                                  | }
+ 5010- 5010    1  KickCompositionOnce                | void KickCompositionOnce()
+ 5011- 5019    9  {                                  | {
+ 5020- 5026    7  }                                  | }
+ 5027- 5027    1  StructLayout                       | [StructLayout(LayoutKind.Sequential)]
+ 5028- 5028    1  struct AccentPolicy                | struct AccentPolicy
+ 5029- 5033    5  {                                  | {
+ 5034- 5035    2  }                                  | }
+ 5036- 5036    1  StructLayout                       | [StructLayout(LayoutKind.Sequential)]
+ 5037- 5037    1  struct WindowCompositionAttributeData | struct WindowCompositionAttributeData
+ 5038- 5041    4  {                                  | {
+ 5042- 5043    2  }                                  | }
+ 5044- 5044    1  StructLayout                       | [StructLayout(LayoutKind.Sequential)]
+ 5045- 5046    2  struct RECT { public int L, T, R, B; } | struct RECT { public int L, T, R, B; }
+ 5047- 5047    1  DllImport                          | [DllImport("user32.dll")]
+ 5048- 5048    1  SetWindowCompositionAttribute      | static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttribut
+ 5049- 5049    1  DllImport                          | [DllImport("gdi32.dll")]
+ 5050- 5050    1  CreateRoundRectRgn                 | static extern IntPtr CreateRoundRectRgn(int l, int t, int r, int b, int w, int h);
+ 5051- 5051    1  DllImport                          | [DllImport("user32.dll")]
+ 5052- 5052    1  SetWindowRgn                       | static extern bool SetWindowRgn(IntPtr hwnd, IntPtr hRgn, bool redraw);
+ 5053- 5053    1  DllImport                          | [DllImport("user32.dll")]
+ 5054- 5055    2  GetWindowRect                      | static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+ 5056- 5056    1  const int WCA_ACCENT_POLICY = 19;  | const int WCA_ACCENT_POLICY = 19;
+ 5057- 5057    1  const int ACCENT_DISABLED = 0;     | const int ACCENT_DISABLED = 0;
+ 5058- 5060    3  const int ACCENT_ACRYLIC = 4;      | const int ACCENT_ACRYLIC = 4;
+ 5061- 5067    7  bool _acrylic;                     | bool _acrylic;
+ 5068- 5071    4  static readonly bool UseSystemBlur = false; | static readonly bool UseSystemBlur = false;
+ 5072- 5072    1  ApplyAcrylic                       | void ApplyAcrylic()
+ 5073- 5114   42  {                                  | {
+ 5115- 5117    3  }                                  | }

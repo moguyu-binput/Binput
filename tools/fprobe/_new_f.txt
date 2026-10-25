@@ -1,0 +1,444 @@
+    // ==================================================================
+    Console.WriteLine("=== 1) 长按中心键开窗口F: 起手是列表层, 光标回中 ===");
+    {
+        ResetQuick();
+        var c = NewCore(true);
+        var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        Check("长按中心键打开了窗口F", c.QuickOpen, $"QuickOpen={c.QuickOpen}");
+        Check("那一摞只有一层(列表层)", f.Depth == 1 && f.Layer == InputCore.Q_LAYER_LIST,
+              $"Depth={f.Depth} Layer=\"{f.Layer}\"");
+        Check("光标回中(第 5 格)", f.Sel == 4, $"Sel={f.Sel}");
+        Check("起手在第 1 页", f.Page == 0, $"Page={f.Page}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 2) 列表层: 短按 A 发出这一格, 长按 A 进深层 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Phrase, "集合打本");      // 槽位 0 = 数字键 1
+        var c = NewCore(true);                            // 预输入版: 发短语接进预览框
+        var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;                                        // 第 1 格
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A);
+        Check("短按 A 把这一格发出去了", NoteOf(c) == "集合打本", $"框里=\"{NoteOf(c)}\"");
+        Check("预输入版发完就关掉 F", !c.QuickOpen, $"QuickOpen={c.QuickOpen}");
+
+        // 长按 = 进深层。发和改只能二选一 —— 先发一条再弹编辑层不是你要的。
+        var c2 = NewCore(true); var t2 = T0;
+        OpenF(c2, ref t2);
+        var f2 = UI(c2);
+        f2.Sel = 0;
+        Tap(c2, ref t2, GamepadInput.A, 600);
+        Check("长按 A 进了深层", f2.Depth == 2 && f2.Layer == InputCore.Q_LAYER_DEEP,
+              $"Depth={f2.Depth} Layer=\"{f2.Layer}\"");
+        Check("深层认住了是哪一格", f2.Slot == 0, $"Slot={f2.Slot}");
+        Check("长按**没有**顺手把那条发出去", NoteOf(c2) == "", $"框里=\"{NoteOf(c2)}\"");
+
+        // 空格子短按就是"往这一格写点什么" -> 直接钻进深层, 省一下
+        var c3 = NewCore(true); var t3 = T0;
+        OpenF(c3, ref t3);
+        var f3 = UI(c3);
+        f3.Sel = 3;                                       // 第 4 格(空)
+        Tap(c3, ref t3, GamepadInput.A);
+        Check("空格子短按也进深层", f3.Depth == 2 && f3.Slot == 3,
+              $"Depth={f3.Depth} Slot={f3.Slot}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 3) 深层: 1 写入短语 / 3 删除 / 中间改绑 / 4·6 按了没反应 ===");
+    {
+        ResetQuick();
+        var c = NewCore(true); var t = T0;
+        c.QuickSetNote("上交任务");
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        Tap(c, ref t, GamepadInput.A, 600);               // 进深层(第 1 格)
+        f.Sel = 0;                                        // 1 号位 = 写入短语
+        Tap(c, ref t, GamepadInput.A);
+        Check("写入短语: 用预览框里现成的字写进第 1 格",
+              QuickStore.At(0)?.Text == "上交任务" && QuickStore.At(0).IsPhrase,
+              $"第1格=\"{QuickStore.At(0)?.Text}\"");
+        Check("预览框里的字留着没被清空", NoteOf(c) == "上交任务", $"框里=\"{NoteOf(c)}\"");
+        Check("写完留在深层(好看见底下那条长条变了)", f.Depth == 2 && c.QuickOpen,
+              $"Depth={f.Depth} QuickOpen={c.QuickOpen}");
+
+        // 4 / 6 号位: 能停能选中, 按了没反应
+        int n0 = QuickStore.Count;
+        f.Sel = 3; Tap(c, ref t, GamepadInput.A);
+        f.Sel = 5; Tap(c, ref t, GamepadInput.A);
+        Check("4 / 6 号位按了没反应", QuickStore.Count == n0 && f.Depth == 2,
+              $"条数={QuickStore.Count}(原 {n0}) Depth={f.Depth}");
+
+        // 3 号位 = 删除: 位置留着, 后面的不往前挪(那条规矩归 quickprobe 守)
+        QuickStore.Set(1, QKind.Phrase, "第二条");
+        f.Sel = 2;
+        Tap(c, ref t, GamepadInput.A);
+        Check("删除: 第 1 格空了而第 2 格还在原处",
+              QuickStore.Empty(0) && QuickStore.At(1)?.Text == "第二条",
+              $"第1格={QuickStore.At(0)?.Text} 第2格={QuickStore.At(1)?.Text}");
+        Check("删完退回列表层", f.Depth == 1, $"Depth={f.Depth}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 4) 写入快捷键: 只记不发, Y 保存, B 放弃 ===");
+    {
+        ResetQuick();
+        var c = NewCore(false);                   // 直出版也能录快捷键
+        var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        Tap(c, ref t, GamepadInput.A, 600);       // 进深层(第 1 格)
+        f.Sel = 1;                                // 2 号位 = 写入快捷键
+        Tap(c, ref t, GamepadInput.A);
+        Check("进了录键页", c.QEdit == 1 && c.Layout == Layout.EN26,
+              $"QEdit={c.QEdit} Layout={c.Layout}");
+
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A, 40, 30000, 0);
+        Check("按 A 记下了一颗键", c.QBuf.Length > 0, $"QBuf=\"{c.QBuf}\"");
+        string one = c.QBuf;
+        Tap(c, ref t, GamepadInput.A, 40, 30000, 0);
+        Check("再按一颗接在后面", c.QBuf != one && c.QBuf.Contains('+'), $"QBuf=\"{c.QBuf}\"");
+        Check("记键期间一个键都没真发出去", TextOutput.Sent.Count == 0,
+              $"发出={TextOutput.Flatten()}");
+
+        Tap(c, ref t, GamepadInput.X);
+        Check("X 删掉了最后一个", c.QBuf == one, $"QBuf=\"{c.QBuf}\"");
+
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.RB);
+        Check("RB 记下空格而不是真发空格", c.QBuf.EndsWith("space"), $"QBuf=\"{c.QBuf}\"");
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0, RightTrigger = 255 }, t);
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("RT(回车)被拦住了", !TextOutput.Flatten().Contains("ENTER"),
+              $"发出=\"{TextOutput.Flatten()}\"");
+
+        // Y = 保存(上面那个"保存"按钮 2.1.1 起撤了)
+        string saved = c.QBuf;
+        Tap(c, ref t, GamepadInput.Y);
+        Check("Y 保存后退出录键页", c.QEdit == -1, $"QEdit={c.QEdit}");
+        Check("存进第 1 格, 种类是快捷键", QuickStore.At(0)?.Kind == QKind.Hotkey
+              && QuickStore.At(0)?.Text == saved,
+              $"第1格=\"{QuickStore.At(0)?.Text}\" 期望=\"{saved}\"");
+        Check("退出后布局还原成九键", c.Layout == Layout.CN9, $"Layout={c.Layout}");
+        Check("保存完还在窗口F 的深层里", c.QuickOpen && f.Depth == 2,
+              $"QuickOpen={c.QuickOpen} Depth={f.Depth}");
+
+        // B = 放弃
+        int n0 = QuickStore.Count;
+        f.Sel = 1;
+        Tap(c, ref t, GamepadInput.A);
+        Tap(c, ref t, GamepadInput.A, 40, 30000, 0);
+        Tap(c, ref t, GamepadInput.B);
+        Check("B 放弃: 退出了也没存", c.QEdit == -1 && QuickStore.Count == n0,
+              $"QEdit={c.QEdit} 条数={QuickStore.Count}(原 {n0})");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 5) 直出版: 没有预览框, 写入短语不给用 ===");
+    {
+        ResetQuick();
+        var c = NewCore(false); var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        Tap(c, ref t, GamepadInput.A, 600);
+        f.Sel = 0;                                // 1 号位 = 写入短语
+        Tap(c, ref t, GamepadInput.A);
+        Check("没有预览框: 写入短语不给用", QuickStore.Count == 0, $"条数={QuickStore.Count}");
+        Check("HasNote = false", !c.HasNote, $"HasNote={c.HasNote}");
+
+        // 但发短语直出版照样能用, 而且面板留着(还能接着发下一条)
+        QuickStore.Set(0, QKind.Phrase, "直出版的短语");
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A);
+        Check("直出版照样能发短语", TextOutput.Flatten().Contains("直出版的短语"),
+              $"发出=\"{TextOutput.Flatten()}\"");
+        Check("直出版发短语不关面板", c.QuickOpen, $"QuickOpen={c.QuickOpen}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 6) 预输入版发短语: 接进预览框, 不复制不发送 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Phrase, "档位测试");
+        var c = NewCore(true); var t = T0;
+        c.QuickSetNote("前面打的");
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A);
+        Check("短语接进了预览框", NoteOf(c) == "前面打的档位测试", $"框里=\"{NoteOf(c)}\"");
+        Check("没有复制 / 没有发键", TextOutput.Sent.Count == 0,
+              $"发出={string.Join("|", TextOutput.Sent)}");
+        Check("发完关掉了 F", !c.QuickOpen, $"QuickOpen={c.QuickOpen}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 7) 数字层长按绑了短语的数字 = 发那条 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(2, QKind.Phrase, "集合打本");     // 槽位 2 = 数字键 3
+        var c = NewCore(true);
+        var t = T0;
+        Check("绑定成功: 3 号上就是那条", QuickStore.ByNum(3)?.Text == "集合打本",
+              $"ByNum(3)={QuickStore.ByNum(3)?.Text}");
+
+        // 按住 LT 进数字层(数字 3 = 右上角 -> 摇杆右上)
+        void Hold(ushort btn, int ms, short lx, short ly, byte lt = 0)
+        {
+            t = t.AddMilliseconds(20);
+            c.Poll(new PadState { Connected = true, Buttons = btn, LX = lx, LY = ly, LeftTrigger = lt }, t);
+            t = t.AddMilliseconds(ms);
+            c.Poll(new PadState { Connected = true, Buttons = btn, LX = lx, LY = ly, LeftTrigger = lt }, t);
+            t = t.AddMilliseconds(20);
+            c.Poll(new PadState { Connected = true, Buttons = 0, LX = lx, LY = ly, LeftTrigger = lt }, t);
+        }
+
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0, LeftTrigger = 255, LX = 30000, LY = 30000 }, t);
+        Check("LT 进了数字层", c.Layout == Layout.NUM9, $"Layout={c.Layout}");
+        Check("摇杆把光标停在 3 上", c.Key9 == 3, $"Key9={c.Key9}");
+
+        TextOutput.Reset();
+        Hold(GamepadInput.A, 600, 30000, 30000, 255);   // 长按
+        Check("长按后把那条短语接进了预览框", NoteOf(c) == "集合打本", $"框里=\"{NoteOf(c)}\"");
+        Check("没有去动剪贴板 / 焦点", TextOutput.Sent.Count == 0,
+              $"发出={string.Join("|", TextOutput.Sent)}");
+
+        // 松开 LT 应该回九键
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("松开 LT 回到九键", c.Layout == Layout.CN9, $"Layout={c.Layout}");
+
+        // 短按 = 出数字
+        TextOutput.Reset();
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0, LeftTrigger = 255, LX = 30000, LY = 30000 }, t);
+        Hold(GamepadInput.A, 60, 30000, 30000, 255);
+        Check("短按还是出数字 3", TextOutput.Flatten().Contains("3"),
+              $"发出=\"{TextOutput.Flatten()}\"");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 7b) 界面收起时松 LT, 不能把数字层永远留在屏幕上 ===");
+    {
+        var c = NewCore(true);
+        var t = T0;
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0, LeftTrigger = 255, LX = 30000, LY = 30000 }, t);
+        Check("先在数字层里", c.Layout == Layout.NUM9, $"Layout={c.Layout}");
+        c.Visible = false;                       // 界面被收起(比如焦点被抢了)
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);   // 松 LT 时界面是收着的
+        Check("收着的时候松 LT 也还原成九键", c.Layout == Layout.CN9, $"Layout={c.Layout}");
+        c.Visible = true;
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("再唤出来不是数字层", c.Layout == Layout.CN9, $"Layout={c.Layout}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 8) 发快捷键: 关 F → 焦点还游戏 → (到点)发组合键 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Hotkey, "alt+r");
+        var c = NewCore(true);
+        var t = T0;
+        c.QuickSetNote("没打完的一句话");
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A);
+        Check("先关掉了 F", !c.QuickOpen && !c.QuickMode, $"QuickOpen={c.QuickOpen}");
+        Check("焦点还给了游戏", TextOutput.Sent.Contains("FOCUSGAME"),
+              $"发出={string.Join("|", TextOutput.Sent)}");
+        Check("这一帧还没发键(要等焦点到位)", !TextOutput.Flatten().Contains("CH:"),
+              $"发出=\"{TextOutput.Flatten()}\"");
+        t = t.AddMilliseconds(400);                   // 等焦点切换的缓冲过去
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("到点后发出了组合键", TextOutput.Sent.Any(x => x.StartsWith("CH:")),
+              $"发出={string.Join("|", TextOutput.Sent)}");
+        Check("预览框里的字没被动过", NoteOf(c) == "没打完的一句话", $"框里=\"{NoteOf(c)}\"");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 9) 绑数字: A 定下 / L3 解除 / B 退回 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(20, QKind.Phrase, "绑号测试");       // 第 3 页第 3 格, 不占数字
+        var c = NewCore(false); var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Page = 2; f.Sel = 2;                              // 槽位 2*9+2 = 20
+        Tap(c, ref t, GamepadInput.A, 600);                 // 进深层
+        Check("深层认住的是槽位 20", f.Slot == 20, $"Slot={f.Slot}");
+        f.Sel = 4;                                          // 中间 = 绑的数字
+        Tap(c, ref t, GamepadInput.A);
+        Check("进了绑数字那一层", f.Depth == 3 && f.Layer == InputCore.Q_LAYER_NUM,
+              $"Depth={f.Depth} Layer=\"{f.Layer}\"");
+        Check("底下那套键盘没被切成数字层(靠浮层挑)", c.Layout == Layout.CN9,
+              $"Layout={c.Layout}");
+
+        f.Sel = 6;                                          // 第 7 格 = 数字 7
+        Tap(c, ref t, GamepadInput.A);
+        Check("绑到了数字 7", QuickStore.ByNum(7)?.Text == "绑号测试",
+              $"ByNum(7)={QuickStore.ByNum(7)?.Text}");
+        Check("原来那格空出来了", QuickStore.Empty(20));
+        Check("绑完退回深层", f.Depth == 2, $"Depth={f.Depth}");
+        Check("深层跟着这一条走, 改认第 7 格", f.Slot == 6, $"Slot={f.Slot}");
+
+        // L3 = 解除绑定
+        f.Sel = 4;
+        Tap(c, ref t, GamepadInput.A);                      // 再开一层
+        Check("又回到绑数字那一层", f.Layer == InputCore.Q_LAYER_NUM, $"Layer=\"{f.Layer}\"");
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = GamepadInput.L3 }, t);
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("L3 一下就解除了绑定", QuickStore.ByNum(7) == null,
+              $"ByNum(7)={QuickStore.ByNum(7)?.Text}");
+        Check("搬到第 2 页往后第一个空位(槽位 9)", QuickStore.At(9)?.Text == "绑号测试",
+              $"槽位9={QuickStore.At(9)?.Text}");
+        Check("解除完退回深层, 并跟着改认槽位 9", f.Depth == 2 && f.Slot == 9,
+              $"Depth={f.Depth} Slot={f.Slot}");
+
+        // B = 退回, 什么都不改
+        int n0 = QuickStore.Count;
+        f.Sel = 4;
+        Tap(c, ref t, GamepadInput.A);
+        Tap(c, ref t, GamepadInput.B);
+        Check("B 退回深层, 不动绑定", f.Depth == 2 && c.QuickOpen
+              && QuickStore.Count == n0, $"Depth={f.Depth} 条数={QuickStore.Count}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 10) 位置就是数字: 不排序, 删了也不往前挪 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Phrase, "甲");
+        QuickStore.Set(1, QKind.Phrase, "乙");
+        QuickStore.Set(2, QKind.Phrase, "丙");
+        string Order()
+        {
+            var s = new System.Text.StringBuilder();
+            for (int i = 0; i < 12; i++)
+            {
+                var it = QuickStore.At(i);
+                if (it != null) s.Append($"[{i}]{it.Text} ");
+            }
+            return s.ToString().Trim();
+        }
+        Check("写在哪一格就是哪个数字, 不排序",
+              QuickStore.ByNum(1)?.Text == "甲" && QuickStore.ByNum(3)?.Text == "丙",
+              Order());
+        int n0 = QuickStore.Count;
+        var c = NewCore(false); var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 1;
+        Tap(c, ref t, GamepadInput.A, 600);
+        f.Sel = 2;                                  // 删除
+        Tap(c, ref t, GamepadInput.A);
+        Check("删掉中间那条: 条数 -1", QuickStore.Count == n0 - 1, $"条数={QuickStore.Count}");
+        Check("后面那条**没**往前挪", QuickStore.At(2)?.Text == "丙" && QuickStore.Empty(1),
+              Order());
+        Check("数字 2 空了, 数字 3 还是丙",
+              QuickStore.ByNum(2) == null && QuickStore.ByNum(3)?.Text == "丙", Order());
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 11) 摇杆 / 十字键 / LB·RB 翻页: F 里那三样都归那一摞 ===");
+    {
+        ResetQuick();
+        var c = NewCore(false); var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+
+        // 摇杆: 推哪选哪, 松手回中(和九键选键同一套)
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, LX = -30000, LY = 30000 }, t);
+        Check("摇杆推左上 -> 第 1 格", f.Sel == 0, $"Sel={f.Sel}");
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true }, t);
+        Check("松手回中 -> 第 5 格", f.Sel == 4, $"Sel={f.Sel}");
+
+        // 十字键: 上下 ±3(三列), 左右 ±1
+        Tap(c, ref t, GamepadInput.DPAD_DOWN);
+        Check("十字键下 -> 第 8 格", f.Sel == 7, $"Sel={f.Sel}");
+        Tap(c, ref t, GamepadInput.DPAD_RIGHT);
+        Check("十字键右 -> 第 9 格", f.Sel == 8, $"Sel={f.Sel}");
+        Tap(c, ref t, GamepadInput.DPAD_UP);
+        Check("十字键上 -> 第 6 格", f.Sel == 5, $"Sel={f.Sel}");
+
+        // LB / RB: 翻页(一页九格, 五页装 45 条)
+        Tap(c, ref t, GamepadInput.RB);
+        Check("RB -> 第 2 页", f.Page == 1, $"Page={f.Page}");
+        Tap(c, ref t, GamepadInput.LB);
+        Tap(c, ref t, GamepadInput.LB);
+        Check("LB 退到第 1 页就停住(不绕回第 5 页)", f.Page == 0, $"Page={f.Page}");
+        for (int i = 0; i < 8; i++) Tap(c, ref t, GamepadInput.RB);
+        Check("最多 5 页(0~4)", f.Page == 4, $"Page={f.Page}");
+
+        // F 开着的时候摇杆不去动九键那套光标(底下那套键盘是收着的)
+        Check("F 开着时摇杆没去动九键的键位光标", c.Key9 == 5, $"Key9={c.Key9}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 12) B 一层层退, 退到列表层再 B 就关掉 F ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Phrase, "甲");
+        var c = NewCore(false); var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        Tap(c, ref t, GamepadInput.A, 600);          // 深层
+        f.Sel = 4;
+        Tap(c, ref t, GamepadInput.A);               // 绑数字层
+        Check("三层都在", f.Depth == 3, $"Depth={f.Depth}");
+
+        Tap(c, ref t, GamepadInput.B);
+        Check("B 退回深层(没关 F)", f.Depth == 2 && c.QuickOpen,
+              $"Depth={f.Depth} QuickOpen={c.QuickOpen}");
+        Tap(c, ref t, GamepadInput.B);
+        Check("B 退回列表层(还没关 F)", f.Depth == 1 && c.QuickOpen,
+              $"Depth={f.Depth} QuickOpen={c.QuickOpen}");
+        Tap(c, ref t, GamepadInput.B);
+        Check("列表层再按 B 才关掉 F", !c.QuickOpen && f.Depth == 0,
+              $"Depth={f.Depth} QuickOpen={c.QuickOpen}");
+    }
+
+    // ==================================================================
+    Console.WriteLine("\n=== 13) 直出版发快捷键: 发得出去, 面板不用关 ===");
+    {
+        ResetQuick();
+        QuickStore.Set(0, QKind.Hotkey, "alt+r");
+        var c = NewCore(false);
+        var t = T0;
+        OpenF(c, ref t);
+        var f = UI(c);
+        f.Sel = 0;
+        TextOutput.Reset();
+        Tap(c, ref t, GamepadInput.A);
+        Check("直出版发快捷键: 面板留着(还能接着发下一条)", c.QuickOpen,
+              $"QuickOpen={c.QuickOpen}");
+        Check("焦点照样还给了游戏", TextOutput.Sent.Contains("FOCUSGAME"),
+              $"发出={string.Join("|", TextOutput.Sent)}");
+        t = t.AddMilliseconds(400);
+        c.Poll(new PadState { Connected = true, Buttons = 0 }, t);
+        Check("到点发出了组合键", TextOutput.Sent.Any(x => x.StartsWith("CH:")),
+              $"发出={string.Join("|", TextOutput.Sent)}");
+    }
+

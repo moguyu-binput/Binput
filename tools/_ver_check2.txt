@@ -1,0 +1,2 @@
+﻿柄输-2.0.0-beta2-精简版|ProductVersion=2.0.0-beta2+b73d3e85913885b3aa4681be06af3ce3e88dcad6|FileVersion=2.0.0.0
+柄输-2.0.0-beta2-完整版|ProductVersion=2.0.0-beta2+b73d3e85913885b3aa4681be06af3ce3e88dcad6|FileVersion=2.0.0.0
