@@ -206,10 +206,20 @@ public partial class OverlayWindow
         // 【调窗口那一档(2.3.3)】这一行的优先级最高: 进去之后屏幕上没有任何别的
         // 变化(设置页翻走了、键盘一模一样), 不在这儿写一句就成了"点了没反应"。
         // 和「滑行」共用同一块板 —— 那一档里滑不起来, 谁也压不着谁。
+        // 【2.4.7 导入 / 导出的结果提示】优先级第二: 也是和「滑行」共用这块板的
+        // 一句临时话(亮几秒自动收回, 见 ShowHint)。亮着的时候**不许把字改回
+        // "滑行"** —— 不然下一帧就把人家冲掉了。已复制 / 彩蛋那两块也在这位置,
+        // 它们亮着的时候这句让位(和滑行一个待遇)。
+        bool hinting = DateTime.Now < _hintUntil;
         if (c.Resizing)
         {
             string rs = $"调窗口 {(int)(c.Scale * 100)}% · 十字键缩放 · B 退出";
             if (SlideHintText.Text != rs) SlideHintText.Text = rs;
+            SlideHintChip.Visibility = Visibility.Visible;
+        }
+        else if (hinting && !copied && !egging)
+        {
+            if (SlideHintText.Text != _hintText) SlideHintText.Text = _hintText;
             SlideHintChip.Visibility = Visibility.Visible;
         }
         else

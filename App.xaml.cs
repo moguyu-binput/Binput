@@ -388,6 +388,10 @@ public partial class App : Application, ISettingsHost
                     }
                 }
                 _win.Render(_core);      // 先把这一帧画好再露脸(见 ShowReady 的说明)
+                // 【诊断】和 ReleaseHold 里那句"屏幕外停...后归位"配一对:
+                // 两句都有 = 窗口走完了露脸全程(用户还看不见就是被游戏盖住了);
+                // 只有这句、没有下半句 = 卡在屏幕外没归位(渲染/调度停了)。
+                Log("界面: 露脸(ShowReady)");
                 // 抢前台要等窗口真正挪回屏幕上(ShowReady 头一两帧是停在屏幕外的):
                 // 现在去抢的话, 抢的是一个看不见的窗口 —— 游戏那边白丢一次焦点,
                 // 全屏游戏会因此黑一下, 看着又是一次"闪"。
@@ -519,6 +523,8 @@ public partial class App : Application, ISettingsHost
         var menu = new Forms.ContextMenuStrip();
         // 托盘菜单只留三项: 以前把七八个开关全堆在这里, 越加越杂。
         // 现在开关都进"设置"那一个页面里, 这里只留最高频的"显隐"。
+        // (2.4.8 曾加过「以管理员身份重启」和升权气泡, 2.4.9 应用户要求删掉 ——
+        //  Xbox 手柄不用管理员就能正常唤醒, 那两样对他是纯打扰。)
         menu.Items.Add("显示 / 隐藏键盘", null, (_, _) => _core.Visible = !_core.Visible);
         menu.Items.Add("设置...", null, (_, _) => OpenSettings());
         menu.Items.Add("退出", null, (_, _) => Shutdown());
@@ -929,18 +935,31 @@ public partial class App : Application, ISettingsHost
         T9Engine.UseSaved();
     }
 
-    /// <summary>设置页的"清除输入习惯": 文件里清掉, 内存里也清掉。</summary>
+    /// <summary>
+    /// 设置页的"清除数据": 输入习惯**和**窗口F 的快捷短语一起清(2.4.7 起;
+    /// 以前只清输入习惯, 用户要求两边一起清)。文件里清掉, 内存里也清掉。
+    /// </summary>
     public void ClearUse()
     {
         T9Engine.ClearUse();
         Config.SaveUse(T9Engine.DumpUse(), T9Engine.DumpLast());
-        Log("输入习惯: 已清除");
+        int q = QuickStore.Count;
+        QuickStore.ClearAll();
+        Log($"数据已清除: 输入习惯 + 快捷 {q} 条");
         _win.RefreshSettings();
     }
 
+    /// <summary>备份文件名的前缀 —— 也是导入时认文件的凭据(见 <see cref="ImportUse"/>)。</summary>
+    const string BACKUP_PREFIX = "柄输-数据-";
+
+    /// <summary>exe 所在的文件夹(单文件发布 / 普通发布 / dotnet run 都指向对的地方)。</summary>
+    static string ExeDir => AppContext.BaseDirectory;
+
     /// <summary>
-    /// 设置页的"导出数据": 输入习惯 + 窗口F 的快捷**一起**存一份明文到你自己挑的地方
-    /// (换机器 / 重装前留底)。以前只导习惯, 换台机器快捷得一个个重新录。
+    /// 设置页的"导出数据": 输入习惯 + 窗口F 的快捷**一起**存一份明文。
+    /// 【2.4.7 起不弹任何对话框】直接写到 **exe 旁边的文件夹**, 文件名带日期时间
+    /// (同一秒连点两次也只往后缀 -2 -3, 不覆盖旧的); 结果在卡片下面那行亮一句
+    /// "导出成功"(见 <see cref="OverlayWindow.ShowHint"/> —— 调用方负责先翻回正面)。
     /// </summary>
     public void ExportUse()
     {
@@ -948,71 +967,83 @@ public partial class App : Application, ISettingsHost
         int q = QuickStore.Count;
         if (n == 0 && q == 0)
         {
-            MessageBox.Show("现在还没有输入习惯、也没有存任何快捷，没什么可导出的。",
-                "柄输", MessageBoxButton.OK, MessageBoxImage.Information);
+            Log("导出: 没什么可导出的(习惯 0 条, 快捷 0 条)");
+            _win.ShowHint("没有可导出的数据");
             return;
         }
-        var dlg = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = "导出数据（输入习惯 + 快捷）",
-            FileName = $"柄输-备份-{DateTime.Now:yyyyMMdd}.txt",
-            DefaultExt = ".txt",
-            Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-        };
-        // 直出版那套界面是置顶窗, 不挂到它上面的话对话框会被游戏画面盖住,
-        // 看着就像点了没反应
-        if (dlg.ShowDialog(_win) != true) return;
+        string dir = ExeDir;
+        string path = Path.Combine(dir, $"{BACKUP_PREFIX}{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+        for (int i = 2; File.Exists(path); i++)      // 同名不覆盖, 往后缀
+            path = Path.Combine(dir, $"{BACKUP_PREFIX}{DateTime.Now:yyyyMMdd-HHmmss}-{i}.txt");
 
-        if (Config.ExportAll(dlg.FileName, T9Engine.DumpUse(), T9Engine.DumpLast(), QuickStore.Slots))
+        if (Config.ExportAll(path, T9Engine.DumpUse(), T9Engine.DumpLast(), QuickStore.Slots))
         {
-            Log($"导出: 习惯 {n} 条 + 快捷 {q} 条 -> {dlg.FileName}");
-            MessageBox.Show($"已经导出到：\n{dlg.FileName}\n\n"
-                + $"输入习惯 {n} 条，快捷短语 / 快捷键 {q} 条。\n\n"
-                + "注意：这个文件是明文的（写成密文别的机器就读不懂了），"
-                + "里面是你常打的词、自己拼的名字和常发的整句话，别随手发给别人。",
-                "柄输", MessageBoxButton.OK, MessageBoxImage.Information);
+            Log($"导出: 习惯 {n} 条 + 快捷 {q} 条 -> {path}");
+            _win.ShowHint("导出成功");
         }
         else
         {
-            Log("导出: 失败 " + dlg.FileName);
-            MessageBox.Show("写不进这个文件，换一个地方再试（比如桌面）。",
-                "柄输", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Log("导出: 写不进 " + path);
+            _win.ShowHint("导出失败");
         }
     }
 
     /// <summary>
-    /// 设置页的"导入数据": 从以前导出的备份把输入习惯**和**快捷都并回来
-    /// (不覆盖这台机器上现有的)。老备份(只有习惯、没有段标记)也认。
+    /// 设置页的"导入数据": 从 **exe 旁边文件夹里**那个备份把习惯**和**快捷并回来。
+    /// 【2.4.7 起不弹任何对话框】也不用挑文件 —— 认文件夹里那个
+    /// <see cref="BACKUP_PREFIX"/>*.txt。几种结果都在卡片下面那行亮一句:
+    ///   ① 这台机器已经有数据     -> "已有数据无法导入"(怕把现有的搞乱)
+    ///   ② 文件夹里没有文件       -> "exe所在目录无文件"
+    ///   ③ 文件夹里有好几个       -> "存在多个文件 请只留一个"(不猜哪个是新的)
+    ///   ④ 文件读不出东西(格式错) -> "格式错误导入失败"
+    ///   ⑤ 读成了                 -> "成功导入"
     /// </summary>
     public void ImportUse()
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog
+        // ① 已经有数据就不让导 —— 这台机器上学着的、设好的, 不能被一份文件搅了
+        if (T9Engine.UseCount > 0 || QuickStore.Count > 0)
         {
-            Title = "导入数据（输入习惯 + 快捷）",
-            DefaultExt = ".txt",
-            Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-        };
-        if (dlg.ShowDialog(_win) != true) return;
-
-        if (!Config.ImportAll(dlg.FileName, out var data, out _, out var quick))
-        {
-            MessageBox.Show("这个文件里没读到东西 —— 可能拿错文件了，或者文件坏了。",
-                "柄输", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Log($"导入: 拦下了(已有习惯 {T9Engine.UseCount} 条 / 快捷 {QuickStore.Count} 条)");
+            _win.ShowHint("已有数据无法导入");
             return;
         }
+        // ② 在 exe 旁边的文件夹里找备份
+        string[] hits = null;
+        try
+        {
+            hits = Directory.GetFiles(ExeDir, BACKUP_PREFIX + "*.txt");
+        }
+        catch (Exception ex) { Log("导入: 列目录失败 " + ex.Message); }
+        if (hits == null || hits.Length == 0)
+        {
+            Log($"导入: {ExeDir} 里没有 {BACKUP_PREFIX}*.txt");
+            _win.ShowHint("exe所在目录无文件");
+            return;
+        }
+        // ③ 好几个备份文件时**不猜**(2.4.7 用户报: 以前悄悄取最新的, 鬼知道导的是
+        // 哪一份) —— 让用户自己决定留哪个, 删到只剩一个再来。
+        if (hits.Length > 1)
+        {
+            Log($"导入: 拦下了(目录里有 {hits.Length} 个 {BACKUP_PREFIX}*.txt)");
+            _win.ShowHint("存在多个文件 请只留一个");
+            return;
+        }
+        string hit = hits[0];
+        // ④ 读文件(Config.ImportAll 自己兜异常, 读不出东西只返回 false)
+        if (!Config.ImportAll(hit, out var data, out _, out var quick))
+        {
+            Log("导入: 读不出东西 <- " + hit);
+            _win.ShowHint("格式错误导入失败");
+            return;
+        }
+        // ⑤ 并进来 + 落盘(合并不是覆盖: 两边都打过的词留次数多的那一次)
         int changed = T9Engine.MergeUse(data);
         int added = QuickStore.Merge(quick);      // 重复的不加, 新来的不抢 1~9
         Config.ClearBroken();                     // 这份数据归我们管了, 不用再当坏文件留着
         SaveUse();                                // 习惯那边写盘(快捷在 Merge 里已经存了)
-        Log($"导入: 习惯 {data.Count} 条(变动 {changed}) + 快捷新增 {added} 条 <- {dlg.FileName}");
+        Log($"导入: 习惯 {data.Count} 条(变动 {changed}) + 快捷新增 {added} 条 <- {hit}");
         _win.RefreshSettings();
-        MessageBox.Show($"输入习惯读进来 {data.Count} 条，其中 {changed} 条是新的或者打得更多；\n"
-            + $"快捷新增 {added} 条（重复的和这台机器上已有的不会动）。\n\n"
-            + $"现在一共：习惯 {T9Engine.UseCount} 条，快捷 {QuickStore.Count} 条。\n\n"
-            + "（原来那台机器上学的没有丢，两边是并在一起的。）",
-            "柄输", MessageBoxButton.OK, MessageBoxImage.Information);
+        _win.ShowHint("成功导入");
     }
 
     protected override void OnExit(ExitEventArgs e)

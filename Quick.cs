@@ -127,6 +127,16 @@ namespace Binput
             Save();
         }
 
+        /// <summary>
+        /// 45 个槽位**全清空**(2.4.7「清除数据」用 —— 用户要求连快捷短语一起清,
+        /// 以前「清除」只清输入习惯、快捷原样留着)。清完立刻写盘。
+        /// </summary>
+        public static void ClearAll()
+        {
+            for (int i = 0; i < MaxSlots; i++) _slot[i] = null;
+            Save();
+        }
+
         /// <summary>两格互换内容(改绑数字用: 目标格有东西就换过来)。</summary>
         public static void Swap(int a, int b)
         {
@@ -164,24 +174,50 @@ namespace Binput
 
         /// <summary>
         /// 把导入的那批**并进来**(不覆盖这台机器上现有的)。
-        /// 一模一样的(种类 + 内容都相同)就跳过; 新来的**只往第 2 页往后塞** ——
-        /// 免得把这台机器上第 1 页已经设好的 1~9 抢掉。返回真正加了几条。
+        /// 【2.4.7】**原槽位空着就归位** —— 导入文件里记着每条原来在哪个槽位
+        /// (见 Config.ExportAll / ImportAll: Num = 槽位 + 1), 绑在数字几的回到
+        /// 数字几。以前这儿把槽位号扔了、一律塞第 2 页往后, 用户报: "导入后绑定
+        /// 数字的全丢了, 第 1 页空一片还要重绑; 45 个满了还少一页"(绑数字的被
+        /// 挤去第 2 页往后, 那 36 格满了就直接把剩下的丢掉, 哪怕第 1 页还空着)。
+        /// 原槽位被这台机器上的条目占了(合并进非空数据时才会), 才往后找空位。
+        /// <para>【2.4.7 补丁】**归位这条路不查重** —— 按内容去重会把用户绑在
+        /// 几处的同一条短语当成重复项跳过后面的: 实测用户 1/5/10 号位各绑了一条
+        /// "辛苦了", 导入后 5 号和 10 号双双消失(导出 10 条只进来 8 条)。
+        /// 同一条出现在几个位置是用户自己的数据, 导入必须原样还原。</para>
+        /// <para>查重只留给**兜底那条路**(没有原槽位 / 原槽位被别的内容占了):
+        /// 内容和这台机器上已有的完全一样才跳过 —— 重复导同一个文件不会翻倍,
+        /// 也不会把本机已有的短语再抄一份(quickprobe 场景 8 守着这条)。</para>
         /// </summary>
         public static int Merge(IEnumerable<(int Num, QKind Kind, string Text)> src)
         {
             int n = 0;
             if (src == null) return 0;
-            foreach (var (_, kind, text) in src)
+            // 按槽位号从小到大过一遍: 绑数字的(第 1 页)先归位, 后面的再说
+            var list = src.Where(x => !string.IsNullOrWhiteSpace(x.Text))
+                          .OrderBy(x => x.Num).ToList();
+            foreach (var (num, kind, text) in list)
             {
-                if (string.IsNullOrWhiteSpace(text)) continue;
                 var body = text.Replace("\n", " ").Replace("\r", "").Trim();
                 if (body.Length == 0) continue;
-                bool dup = false;
-                foreach (var s in _slot)
-                    if (s != null && s.Kind == kind && s.Text == body) { dup = true; break; }
-                if (dup) continue;
-                int slot = FirstEmpty(NumSlots);
-                if (slot < 0) break;                        // 装满了
+                int want = num >= 1 && num <= MaxSlots ? num - 1 : -1;   // 导出时记着的原槽位
+                int slot;
+                if (want >= 0 && _slot[want] == null)
+                {
+                    slot = want;                       // 原槽位空着 -> 归位(数字绑定也保住,
+                                                       // 内容和别处重复也照归 —— 那是用户绑的)
+                }
+                else
+                {
+                    // 没有原槽位(num=0 的老条目), 或者原槽位被这台机器别的内容占了:
+                    // 往后找空位, 并且**不抢 1~9**(FirstEmpty(NumSlots)), 老规矩不变。
+                    // 只有这条路查重: 一模一样的(种类 + 内容都相同)才跳过。
+                    bool dup = false;
+                    foreach (var s in _slot)
+                        if (s != null && s.Kind == kind && s.Text == body) { dup = true; break; }
+                    if (dup) continue;
+                    slot = FirstEmpty(NumSlots);
+                }
+                if (slot < 0) break;                   // 45 个全满了
                 _slot[slot] = new QuickItem { Kind = kind, Text = body };
                 n++;
             }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Binput;
 using GB = Windows.Gaming.Input.GamepadButtons;                  // 标准视图的按键掩码
 using GL = Windows.Gaming.Input.GameControllerButtonLabel;        // 微软给每颗键标的名字
@@ -63,6 +64,8 @@ static class Program
         Case3_Hat();
         Case4_Axis();
         Case5_NintendoSwap();
+        Case7_FirstFrameDeadline();
+        Case8_PickLayout();
 
         Console.WriteLine(_fail == 0 ? "\n全部通过" : $"\n有 {_fail} 项没过");
         Environment.Exit(_fail == 0 ? 0 : 1);
@@ -334,7 +337,126 @@ static class Program
         Console.WriteLine();
     }
 
+
+    /// <summary>
+    /// 【7】首帧期限（2.4.11）—— 这一条是**从用户的日志里挖出来的洞**补的。
+    ///
+    /// <para>原来的看门狗只对"曾经有过快照、后来断供"动手；重开之后要是设备再也不给
+    /// 报告，快照一直是 null，它就一句 `continue`（"还没收到过第一帧，再等等"）等下去 ——
+    /// 无期。读线程堵在 ReadFile、管理线程堵在 Join，日志安静得像是没事，手柄其实瞎了。
+    /// 蓝牙+游戏那一场就是这么死的：看门狗重开一次，之后 20 多秒一条日志都没有。</para>
+    ///
+    /// <para>这里钉三件事：到点了**必须**动手 / 没到点**不许**动手 / 中途解出过一帧
+    /// 就**交回给断供那条**管；顺带钉住期限"翻倍到 10 秒封顶"（一直等不到就别
+    /// 2.5 秒刷一行日志）。</para>
+    /// </summary>
+    static void Case7_FirstFrameDeadline()
+    {
+        Console.WriteLine("【7】首帧期限: 接上之后到点还没解出一帧, 看门狗必须动手");
+
+        var t = typeof(HidPad);
+        var mi = t.GetMethod("FirstFrameOverdue", BindingFlags.NonPublic | BindingFlags.Static);
+        Check("找得到首帧期限那个判据", mi != null ? "有" : "没有", "有");
+        if (mi == null) { Console.WriteLine(); return; }
+
+        bool Due(long now) => (bool)mi.Invoke(null, new object[] { now });
+        void Set(string f, long v)
+            => t.GetField(f, BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, v);
+        long Get(string f) => (long)t.GetField(f, BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        void Snap(bool there)   // 造/清一份"当前快照"(Snap 是私有的, 只能反射写)
+        {
+            var f = t.GetField("_snap", BindingFlags.NonPublic | BindingFlags.Static);
+            if (!there) { f.SetValue(null, null); return; }
+            var ty = f.FieldType;
+            var o = Activator.CreateInstance(ty, true);
+            ty.GetField("St").SetValue(o, new PadState());
+            ty.GetField("At").SetValue(o, Environment.TickCount64);
+            f.SetValue(null, o);
+        }
+
+        long now = Environment.TickCount64;
+        Snap(false);
+        Set("_roundAt", now);
+        Set("_firstMs", 2500);
+        Check("刚接上(0 秒): 不动手", Due(now) ? "动手" : "不动", "不动");
+        Check("才过 2 秒: 还不动手", Due(now + 2000) ? "动手" : "不动", "不动");
+        Check("过了 2.5 秒还没帧: 动手", Due(now + 2600) ? "动手" : "不动", "动手");
+
+        Snap(true);                                  // 中途解出过一帧
+        Check("解出过一帧: 交回断供那条管", Due(now + 9000) ? "动手" : "不动", "不动");
+
+        // 期限: 一直等不到就翻倍, 10 秒封顶(别 2.5 秒刷一行日志)
+        Snap(false);
+        Set("_firstMs", 2500);
+        var log = t.GetMethod("LogNoFrame", BindingFlags.NonPublic | BindingFlags.Static);
+        Check("找得到那句报话", log != null ? "有" : "没有", "有");
+        if (log != null)
+        {
+            log.Invoke(null, null); Check("喊一次 -> 期限翻倍", Get("_firstMs").ToString(), "5000");
+            log.Invoke(null, null); Check("再喊一次 -> 再翻倍", Get("_firstMs").ToString(), "10000");
+            log.Invoke(null, null); Check("到 10 秒封顶", Get("_firstMs").ToString(), "10000");
+        }
+        Console.WriteLine();
+    }
+
     // ============================================================ 断言
+    // ============================================================ 场景8: 挑"眼镜"(哪号 collection)
+    /// <summary>
+    /// 钉的是这个坑: 解析时一律按顶层 collection(0) 问, 描述符把摇杆塞进子
+    /// collection 时就**一个都问不到**(表现 = 报告铺天盖地地来, 一个都解不出)。
+    /// 挑眼镜这段是**纯的**(只吃"描述符声明了什么"), 没真手柄也能钉。
+    /// </summary>
+    static void Case8_PickLayout()
+    {
+        Console.WriteLine("\n=== 场景8: 按描述符挑 collection(别一律问顶层) ===");
+
+        // 造 caps 的小帮手: page / 报告号 / collection / 是不是范围 / 用法(范围)
+        static HidPad.Cap A(ushort page, byte rid, ushort lc, ushort u)
+            => new HidPad.Cap { Page = page, Rid = rid, Lc = lc, UMin = u, UMax = u };
+        static HidPad.Cap R(ushort page, byte rid, ushort lc, ushort lo, ushort hi)
+            => new HidPad.Cap { Page = page, Rid = rid, Lc = lc, Range = true, UMin = lo, UMax = hi };
+
+        // ① **这次的真凶**: 同一份描述符里 0x01(插线)挂顶层、0x31(蓝牙)挂第 3 层 ——
+        //    必须**按这一帧的报告号**挑层, 混着问就是 0xC011000A(报告号对不上)
+        var l1 = HidPad.PickLayoutFrom(
+            new[] { A(0x01, 0x01, 0, 0x30), A(0x01, 0x31, 3, 0x30) },
+            new[] { A(0x09, 0x01, 0, 0x01), A(0x09, 0x31, 3, 0x02) });
+        Check("蓝牙帧(0x31) -> 挑第几层", l1.AxisLcFor(0x31), (ushort)3);
+        Check("插线帧(0x01) -> 挑第几层", l1.AxisLcFor(0x01), (ushort)0);
+        Check("  蓝牙帧的按钮在第几层", string.Join("/", l1.BtnLcsFor(0x31)), "3");
+        Check("  插线帧的按钮在第几层", string.Join("/", l1.BtnLcsFor(0x01)), "0");
+
+        // ② 描述符只声明了顶层(插线那种) -> 挑 0, 跟老行为一致(别把好的改坏)
+        var l2 = HidPad.PickLayoutFrom(
+            new[] { A(0x01, 0x01, 0, 0x30) },
+            new[] { A(0x09, 0x01, 0, 0x01) });
+        Check("只有顶层 -> 挑第几层", l2.AxisLcFor(0x01), (ushort)0);
+
+        // ③ 描述符用"用法范围"一口气声明(0x30~0x35), 里面含左摇杆 X -> 也算命中
+        var l3 = HidPad.PickLayoutFrom(new[] { R(0x01, 0x31, 2, 0x30, 0x35) },
+                                       new[] { A(0x09, 0x31, 2, 0x01) });
+        Check("范围声明 0x30~0x35 -> 挑第几层", l3.AxisLcFor(0x31), (ushort)2);
+
+        // ④ 按钮分散在 1 和 4 两层 -> 两层都得收着(少一层就少几颗键)
+        var l4 = HidPad.PickLayoutFrom(new[] { A(0x01, 0x31, 1, 0x30) },
+                                       new[] { A(0x09, 0x31, 1, 0x01), A(0x09, 0x31, 4, 0x02) });
+        Check("按钮分散在 1/4 -> 收全没", string.Join("/", l4.BtnLcsFor(0x31)), "1/4");
+
+        // ⑤ 描述符里没有 0x01 页的轴(键盘鼠标之类) -> 退回 0, 别崩
+        var l5 = HidPad.PickLayoutFrom(new[] { A(0x0C, 1, 0, 0x01) }, new HidPad.Cap[0]);
+        Check("没有摇杆 -> 退回第几层", l5.AxisLcFor(0x31), (ushort)0);
+        Check("  按钮一个没有 -> 按摇杆那层问", string.Join("/", l5.BtnLcsFor(0x31)), "0");
+
+        // ⑥ 别的页(陀螺仪 0x40 之类)也用 0x30 -> 不能抢在通用桌面页前面
+        var l6 = HidPad.PickLayoutFrom(
+            new[] { A(0x40, 0x31, 5, 0x30), A(0x01, 0x31, 7, 0x30) },
+            new[] { A(0x09, 0x31, 7, 0x01) });
+        Check("别的页也用 0x30 -> 认哪个", l6.AxisLcFor(0x31), (ushort)7);
+
+        // ⑦ 报告号对不上时(描述符只声明 0x01, 却来了 0x31) -> 退回第一个, 总比崩好
+        Check("来了没声明过的报告号 -> 退回", l2.AxisLcFor(0x31), (ushort)0);
+    }
+
     static void Check(string what, string got, string want)
     {
         bool ok = got == want;

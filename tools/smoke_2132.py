@@ -143,7 +143,10 @@ def main():
     print("  只开一份(第二份让位):", p2.returncode == 0)
     print("  窗口画出来了:", bool(hwnd))
     print("  窗口尺寸合理:", size[0] > 200 and size[1] > 200, "(%dx%d)" % size)
-    print("  界面唤出过:", "顶前台 成功" in txt)
+    # 界面唤出过的证据**看版本**: 预输入版会打"顶前台 成功"(它要抢焦点),
+    # 直出版不打那一行, 但"屏幕外停 ... 后归位"是两边都有的(ShowReady 演完
+    # 才露脸)。只认前者的话, 直出版的包会被误判成"没唤出来"。
+    print("  界面唤出过:", ("顶前台 成功" in txt) or ("后归位" in txt))
     print("  dict.txt 已加载:", bool(m) and int(m.group(1)) > 40000,
           "(%s 条)" % (m.group(1) if m else "没读到"))
     print("  九键默认只留字母:", "隐藏(只留字母)" in txt)

@@ -90,6 +90,22 @@ public partial class OverlayWindow
     /// <summary>「已复制」亮到什么时候(见 Render 里 CopyChip 那两行)。</summary>
     DateTime _copyUntil = DateTime.MinValue;
 
+    /// <summary>导入 / 导出那句临时提示亮到什么时候、亮的是什么(见 Render 里 SlideHintChip 那一段)。</summary>
+    DateTime _hintUntil = DateTime.MinValue;
+    string _hintText = "";
+
+    /// <summary>
+    /// 在卡片下面那行(「滑行」二字那块板)亮一句临时的话, 几秒后自动收回、归位给滑行。
+    /// 【2.4.7】给导入 / 导出用: 那两个动作以前弹 Windows 对话框(存哪 / 选哪个文件),
+    /// 用户拍板全去掉, 结果改成在这儿亮一句。**调用方负责先翻回正面** ——
+    /// 这块板长在键盘那一面上, 摊着设置页的时候看不见(和「调整窗口」一个套路)。
+    /// </summary>
+    public void ShowHint(string text, int ms = 2600)
+    {
+        _hintText = text;
+        _hintUntil = DateTime.Now.AddMilliseconds(ms);
+    }
+
     /// <summary>
     /// 关于页按 A: 整段说明复制进剪贴板, 卡片下面那行亮一下「已复制」。
     /// 复制进去的就是格子上摆的那段字(版本号、三个路径都在里头)—— 出问题时

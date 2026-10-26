@@ -59,6 +59,7 @@ public sealed class InputCore : IQuickHost
     public bool ShiftOn => ShiftHeld || ShiftLatch;
 
     public double StickX, StickY;        // 左摇杆点位, -1..1
+    short _stickLX, _stickLY;            // 左摇杆这一帧的原始值(-32768..32767); ClearInput 问"手还推着吗"用
 
     // ---- 右摇杆: 九键翻成标点 ----
     /// <summary>九键这会儿是不是翻成了标点(推右摇杆时出现, 回中就翻回去)。</summary>
@@ -237,6 +238,14 @@ public sealed class InputCore : IQuickHost
     bool _wakeLatch;                     // 这一下已经切过, 松开之后再按才算新的一下
     /// <summary>唤出这一串键的账还没结完: 组合齐过、现在还有没松手的。</summary>
     bool _wakeBusy;
+    /// <summary>
+    /// 唤醒键按着、却从来没凑齐过组合的时刻(诊断用)。
+    /// <para>用户报"PS5 插线 + 游戏按唤醒键有时按不出来": 到底是没识别到, 还是识别到
+    /// 了窗口没出来, 以前这条路一声不响只能干猜。现在切换时打一行日志(带"在听哪路"),
+    /// 再加上这个探测器 —— 组合里的键按着却 600ms 没凑齐(读输入在抖, 帧跟不上)
+    /// 也会喊一嗓子。</para>
+    /// </summary>
+    DateTime? _wakeNever;
 
     /// <summary>
     /// 手柄这一页的选项。**挑的是"打字时腾得出来"的那几颗**: Back / Start(Xbox 上那两个
@@ -723,6 +732,11 @@ public sealed class InputCore : IQuickHost
                 _wakeLatch = true;
                 _lastActivity = now;
                 Dirty = true;
+                // 【诊断】唤出/收起这一下打一行, 带"这一帧听的是哪一路" ——
+                // 用户报"PS5 插线+游戏有时唤不出来 / 蓝牙完全无效", 有这行才知道
+                // 到底是"没识别到"(日志里压根没有这行)还是"识别到了但窗口没出来"
+                // (这行有, 但外面那句"屏幕外停...后归位"没有)。两种病治法不一样。
+                App.Log($"唤醒键(手柄): {(Visible ? "唤出" : "收起")} · 在听 {PadSource}");
             }
             // 刚收起来的话摊子照收(数字层要还回去、窗口F 要关掉、调窗口那一档要结掉)
             if (!Visible)
@@ -733,6 +747,7 @@ public sealed class InputCore : IQuickHost
                 if (QuickOpen) QuickClose();
             }
             _prevBtn = btn; _prevLT = lt; _prevRT = rt; _prevL3 = l3; _prevR3 = r3;
+            _wakeNever = null;
             return;
         }
         // 到这儿就是"组合没齐"了: 这一串键全松开的话, 把手势的账也一并抹掉,
@@ -740,6 +755,21 @@ public sealed class InputCore : IQuickHost
         if (!someWake) _wakeBusy = false;
         _wakeFrames = 0;
         _wakeLatch = false;
+
+        // 【诊断】组合里的键按着, 却从来没凑齐过 —— 读输入在抖(帧跟不上)时就是这个
+        // 状态: 用户明明按住着, 却永远等不到"两帧都在", 表现就是"按唤醒没反应"。
+        // 走到这儿说明 allWake 一次都没成立过(成立过的话 _wakeBusy 会把上面的分支接走)。
+        if (someWake && !_wakeBusy)
+        {
+            if (_wakeNever == null) _wakeNever = now;
+            else if ((now - _wakeNever.Value).TotalMilliseconds > 600)
+            {
+                App.Log($"唤醒键: 组合按了 {(int)(now - _wakeNever.Value).TotalMilliseconds}ms "
+                      + $"也没凑齐两帧(在听 {PadSource})");
+                _wakeNever = now;                 // 还按着就每秒报一次, 别只喊一次
+            }
+        }
+        else _wakeNever = null;
 
         bool anyInput = pressed != 0 || lt || rt || l3 || r3 ||
                         Math.Sqrt((double)st.LX * st.LX + (double)st.LY * st.LY) >= DZ;
@@ -1102,6 +1132,11 @@ public sealed class InputCore : IQuickHost
     void HandleStick(short rawX, short rawY, DateTime now)
     {
         if (Resizing) return;
+        // 【摇杆真值每一帧都记, 不管走哪条分支】ClearInput 要问一句"手还推着吗"
+        // (见那儿的光标归位)。滑行 / 窗口F / 设置那几条分支都会提前 return,
+        // 不在这儿记的话那些窗口里摇杆的真值就冻住了 —— 关 F 那一刻拿到的是
+        // 进 F 之前的旧值, 会误判成"没推", 光标照样闪一下。
+        _stickLX = rawX; _stickLY = rawY;
         // 设置那一面: 摇杆是"在九宫格里选格" —— 和九键选键同一套(推方向选格、回中落回
         // 正中)。以前这一面摇杆干脆不接管, 结果九宫格里找一格只能拿十字键一格格挪。
         if (Settings)
@@ -2692,7 +2727,13 @@ public sealed class InputCore : IQuickHost
         PinyinIdx = 0;
         DropSent();
         Focus = FocusZone.Keyboard;
-        Key9 = 5;
+        // 【摇杆推着的时候, 光标不归位】2.4.7 用户报: "长按数字发快捷短语, 左摇杆
+        // 瞬间闪回中心, 再回到正在推的地方"。根因就在这一行: 发短语(预输入版)要走
+        // QuickClose -> ClearInput, 无条件把 Key9 按回 5; 而摇杆还推着, 下一帧
+        // HandleStick 又把它拽回摇杆指着的那一格 —— 中间闪一下。
+        // 摇杆没推时这一行和 HandleStick 每帧做的事本来一样(见 "active ? PointTo9 : 5"),
+        // 留着只为兜住"摇杆不碰 Key9"的布局(26 键): 换回九键时光标照旧落正中。
+        if (Math.Sqrt((double)_stickLX * _stickLX + (double)_stickLY * _stickLY) < DZ) Key9 = 5;
         Drop26Mods();
         Dirty = true;
     }

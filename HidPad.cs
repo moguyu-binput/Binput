@@ -45,6 +45,39 @@ public static class HidPad
     const long STALE_MS = 1500;
 
     /// <summary>
+    /// 多久没读到**能用的**报告就当"这台不读了", 强制重开一次。
+    /// <para>为什么需要它: <c>ReadFile</c> 是**同步阻塞**的。设备"人还在、但不再
+    /// 发报告给我们"时(蓝牙手柄被游戏 / Steam 接管就会这样), 读线程会**永久堵**在
+    /// ReadFile 里 —— 管理线程一直在 Join 等它, 于是再也不会重连, 快照过期后
+    /// 柄输一直报"没连接", 直到重启程序。用户原话: "开了游戏, 蓝牙就控制不了了,
+    /// 像被游戏独占了; USB 没问题" —— USB 不走这套 BT 栈, 所以独独蓝牙犯病;
+    /// 而"USB 插着游戏里按唤醒键有时按不出来"也是这一族: 读一断, 唤醒键就断。</para>
+    /// <para>看门狗到点就把堵着的那一帧取消掉(<c>CancelIoEx</c>), 读线程返回、
+    /// 管理线程重新找设备。真被独占了(连句柄都开不出来)也至少会留下一行日志,
+    /// 看得出是"读不到"还是"打不开"—— 两种病治法不一样。</para>
+    /// <para>门槛和 <see cref="STALE_MS"/> 取同一条: 那一档起柄输就已经当这只手柄
+    /// "断了"(GetState 直接报没连接), 看门狗同时动手抢回设备, 一分一秒都不浪费 ——
+    /// 唤醒键最多瞎这一会儿。</para>
+    /// </summary>
+    const long SILENT_MS = 1500;
+
+    /// <summary>
+    /// 【2.4.11】接上手柄之后, 给"第一帧"的期限 —— 到点还没解出一帧就当这一届是死的,
+    /// 取消 + 重开, 不再傻等。
+    ///
+    /// <para>为什么非得有它: 2.4.10 的看门狗只对**曾经有过**快照的情况动手
+    /// (<c>if (s == null) continue;</c> —— 原话"还没收到过第一帧, 再等等")。
+    /// 那一等是**无期**的: 用户"蓝牙 + 游戏"那一场, 重开一次之后设备再也不给
+    /// 报告, 快照永远是 null, 看门狗从此一声不出 —— 读线程堵在 <c>ReadFile</c> 里,
+    /// 管理线程堵在 <c>Join</c> 上, 界面和日志一起安静地瞎掉, 只能重启程序。
+    /// 有线能自愈只是因为有线重开后报告立刻就来, 恰好绕过了这个洞。</para>
+    ///
+    /// <para>等不到就把期限翻倍、10 秒封顶: 一来别 2.5 秒刷一行日志, 二来真要是
+    /// 手柄慢热, 多给它几秒也不亏。解出第一帧就立刻恢复 2.5 秒。</para>
+    /// </summary>
+    const long FIRST_MS_MIN = 2500, FIRST_MS_MAX = 10000;
+
+    /// <summary>
     /// 读报告的缓冲区大小, 按**最长的那种**给: USB 报告 64 字节、蓝牙 78 字节。
     /// <c>ReadFile</c> 返回的是这一帧实际多少字节, 缓冲区大一点不影响。
     /// </summary>
@@ -59,6 +92,26 @@ public static class HidPad
     static int _dumps;                        // 首帧原始字节只打一次, 留着对线用
     static Thread _mgr;
     static string _name;
+    static volatile List<Opened> _cur;      // 这一轮开着的设备(看门狗要取消它们)
+    static bool _hadDev;                    // 上一轮还连着吗(只为"一台都找不到"那句只喊一次)
+    static int _miss;                       // 连续几次一台都没找到(决定接下来找得多勤)
+    static int _openErr;                    // 上次"打不开"的错误码(只为别刷屏)
+    static long _openErrAt;                 // 上次喊"打不开"是什么时候
+    // ---- 首帧期限(2.4.11) ----
+    static long _roundAt;                   // 这一届是什么时候开的(算首帧期限用)
+    static int _gotAny;                     // 这一届收到了多少个报告(解不出的也算)
+    static int _badParse;                   // "收得到但解不出"每届只喊一次, 别刷屏
+    static long _firstMs = FIRST_MS_MIN;    // 当前的首帧期限(一直等不到就越等越久)
+    static int _noFrameN;                   // "一个都没解出来"喊过几次(前 3 次都喊)
+    static long _noFrameAt;                 // 上次喊是什么时候(之后 30 秒一次)
+    /// <summary>
+    /// 管理线程收摊前置 true: 看门狗看到就退, 好让管理线程的 Join 等得到。
+    /// <para>【2.4.9 修的一个死锁】2.4.7~2.4.8 里看门狗是 <c>while(!_stop)</c> 永续循环,
+    /// 管理线程在读线程死后 <c>watch.Join()</c> 等它退出 —— **永远等不到**。于是读线程
+    /// 一死管理线程就卡死, 再也不重连。用户实测三条全中: "插拔一下有线也没法控制了,
+    /// 必须关软件关游戏重开" / "蓝牙进游戏就废" / "有时按唤醒不出来"。</para>
+    /// </summary>
+    static volatile bool _watchQuit;
 
     public static void Start()
     {
@@ -152,19 +205,51 @@ public static class HidPad
             var open = OpenAll(++round);
             if (open.Count == 0)
             {
-                Thread.Sleep(800);
+                // 刚才还连着、现在一台都找不着: 拔了 / 没电 / 蓝牙断了都走这儿。
+                // **还有一种**: 游戏(Steam)把蓝牙手柄的 HID 设备独占了, CreateFile
+                // 直接失败 —— 那种重开也没用, 但这行日志能让人看出是"打不开"
+                // 而不是"读不到", 两种病治法不一样(见 WatchLoop)。
+                if (_hadDev)
+                {
+                    App.Log("HID: 现在一台都找不到了(拔了 / 没电 / 蓝牙断了 / 被游戏独占了?)");
+                    _hadDev = false;
+                    _miss = 0;                   // 刚丢: 接下来几次找得勤一点
+                }
+                // 刚丢设备的那几次找勤一点(150ms): 游戏抢手柄大多是**暂时的**
+                // (DS5 被输出报告噎得重连一下 / 独占就独占几秒), 抢在它还回来
+                // 那一瞬间开掉, 唤醒键才不会有一段时间按不动。一直找不着再回到
+                // 800ms, 不白烧 CPU。
+                Thread.Sleep(_miss < 12 ? 150 : 800);
+                _miss++;
                 continue;
             }
+            _hadDev = true;
+            _miss = 0;
 
             _name = open[0].Name;
             App.Log($"HID: 接上 {open[0].Name}({open.Count} 个接口), 开始读报告");
 
+            _cur = open;
+            // 这一届的账本清零: 首帧期限从这儿起算, 收到/解出几个也从这儿重数。
+            _roundAt = Environment.TickCount64;
+            _gotAny = _badParse = 0;
+            _dumps = 0;
+            var watch = new Thread(WatchLoop) { IsBackground = true, Name = "HidPadWatch" };
             var threads = new List<Thread>(open.Count);
             foreach (var o in open)
                 threads.Add(new Thread(() => ReadLoop(o)) { IsBackground = true });
 
+            watch.Start();                         // 看门狗先起: 第一帧就可能堵死
             for (int i = 0; i < threads.Count; i++) threads[i].Start();
             for (int i = 0; i < threads.Count; i++) threads[i].Join();
+            _cur = null;
+            // 【先通知看门狗退, 再等它】顺序不能反: 看门狗是永续循环(见 _watchQuit
+            // 上面那段), 不通知就 Join 是死等 —— 2.4.7~2.4.8 就是这么卡死的:
+            // 读线程一死(拔线 / 蓝牙断 / 看门狗取消), 管理线程卡在 Join 上,
+            // 从此再也不重连, 手柄等于瞎了, 只能重启程序。
+            _watchQuit = true;
+            watch.Join();
+            _watchQuit = false;                    // 复位, 下一届用
 
             foreach (var o in open)
             {
@@ -178,6 +263,77 @@ public static class HidPad
         }
     }
 
+    /// <summary>
+    /// 看门狗: 能用的报告断供超过 <see cref="SILENT_MS"/> 就把这一轮全部取消,
+    /// 让堵在 <c>ReadFile</c> 里的线程赶紧回来、管理线程重新找设备。
+    /// <para>没有它, "设备被接管后不再发报告"这一种死法是**永久**的 ——
+    /// 读线程出不来, 管理线程就永远等在 Join 上(见 <see cref="SILENT_MS"/> 上面那段)。</para>
+    /// <para>退出条件有两个: <c>_stop</c>(程序退出)和 <c>_watchQuit</c>(管理线程收摊了,
+    /// 见 <see cref="_watchQuit"/> 上面那段 —— 2.4.9 修的死锁就在这)。</para>
+    /// </summary>
+    static void WatchLoop()
+    {
+        List<Opened> fired = null;                 // 这一轮已经处置过了(别 500ms 踩一脚)
+        while (!_stop)
+        {
+            if (_watchQuit) break;                 // 管理线程收摊了(届结束), 我退
+            Thread.Sleep(250);
+            if (_watchQuit) break;                 // 睡的那 250ms 里可能就通知了
+            var open = _cur;
+            if (open == null) { fired = null; continue; }     // 管理线程在重找, 不归我管
+            if (ReferenceEquals(open, fired)) continue;
+            long now = Environment.TickCount64;
+            var s = Volatile.Read(ref _snap);
+            if (s != null)
+            {
+                // 老规矩: 曾经有过报告, 后来断供超过 SILENT_MS —— 取消这一届重开。
+                if (now - s.At <= SILENT_MS) continue;
+                fired = open;
+                App.Log($"HID: {SILENT_MS / 1000} 秒没读到能用的报告, 重开设备"
+                        + "(游戏把蓝牙手柄接管了就会这样; 重开也找不回就说明被独占了)");
+            }
+            else
+            {
+                // 【2.4.11】以前这两行只有一个 `continue`(还没收到过第一帧, 再等等)。
+                // 那一等是无期的 —— 详见 FIRST_MS_MIN 上面那段: 蓝牙那场重开之后
+                // 设备再也不给报告, 快照永远是 null, 看门狗从此不动手。首帧也得
+                // 有期限, 到点一样取消 + 重开。
+                if (!FirstFrameOverdue(now)) continue;
+                fired = open;
+                LogNoFrame();
+            }
+            foreach (var o in open) CancelIoEx(o.Handle, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>
+    /// 这一届是不是"接上之后到点了, 一个能用的报告都没解出来"(看门狗该动手了吗)。
+    /// <para>快照要**仍然是 null** 才算: 中途解出过一帧就说明设备活着, 那就交给
+    /// <c>SILENT_MS</c> 那条(断供)管, 别在这里抢。</para>
+    /// </summary>
+    static bool FirstFrameOverdue(long now)
+        => Volatile.Read(ref _snap) == null && now - _roundAt > _firstMs;
+
+    /// <summary>
+    /// "这一届一个能用的报告都没解出来" —— 报一句, 并把下一届的期限放宽一倍。
+    ///
+    /// <para>括号里那两个数是留给下次对线用的, 两种病治法不一样:
+    /// **收到 0 个** = <c>ReadFile</c> 压根堵着不给数据(重开能不能救, 看下一届);
+    /// **收到一堆但解出 0 个** = 报告在来, 但 HidP 照新描述符解不出主报告
+    /// (手柄被换了报告模式), 那是另一种病。</para>
+    /// </summary>
+    static void LogNoFrame()
+    {
+        long now = Environment.TickCount64;
+        _noFrameN++;
+        long ms = _firstMs;
+        _firstMs = Math.Min(_firstMs * 2, FIRST_MS_MAX);   // 一直等不到就别 2.5 秒喊一遍
+        if (_noFrameN > 3 && now - _noFrameAt < 30000) return;
+        _noFrameAt = now;
+        App.Log($"HID: 接上 {(ms / 1000.0):0.#} 秒了, 一个能用的报告都没解出来"
+              + " —— 取消这一届, 重开再试");
+    }
+
     // ============================================================ 读循环
     static void ReadLoop(Opened o)
     {
@@ -186,13 +342,33 @@ public static class HidPad
         while (!_stop)
         {
             if (!ReadFile(o.Handle, buf, (uint)buf.Length, out uint read, IntPtr.Zero) || read == 0)
+            {
+                // 错误码留着对线用: 1167=设备没了(DS5 被游戏噎得重连 / 拔了),
+                // 995=看门狗取消的, 6=句柄坏了。看不出是哪一种的时候这行就是线索。
+                int err = Marshal.GetLastWin32Error();
+                App.Log($"HID: 读报告出错(错误 {err}"
+                      + (err == 1167 ? " = 设备没了(重连 / 拔了)"
+                         : err == 995 ? " = 看门狗取消的"
+                         : err == 6 ? " = 句柄坏了" : "") + "), 回去重找");
                 return;                                  // 拔了 / 出错, 交给管理线程去重连
+            }
 
-            var st = ParseHid(o.Preparsed, buf, read, usages, out int n);
-            if (st == null) continue;                    // 不是主报告(固件/校准之类)
-
+            Interlocked.Increment(ref _gotAny);              // 收到了(解不解得出另说)
+            var st = ParseHid(o.Preparsed, buf, read, usages, out int n, o.Lay);
+            if (st == null)
+            {
+                // 不是主输入报告(固件 / 校准之类), 跳过。这一届只提醒一次, 别刷屏。
+                if (Interlocked.Increment(ref _badParse) == 1)
+                    App.Log($"HID: 报告收得到但解不出({read} 字节: "
+                          + BitConverter.ToString(buf, 0, Math.Min((int)read, 16)) + ")");
+                continue;
+            }
             if (_dumps++ == 0)
+            {
                 App.Log("HID 首帧: " + BitConverter.ToString(buf, 0, Math.Min((int)read, 16)));
+                _firstMs = FIRST_MS_MIN;                     // 活过来了: 期限和喊话都恢复
+                _noFrameN = 0;
+            }
             if (n > 0) LastUsages = string.Join(",", usages.Take(n));
             else LastUsages = "";                        // 松手了要清掉, 不然探针看到的是上一帧的
             LastRaw = BitConverter.ToString(buf, 0, Math.Min((int)read, 16));
@@ -216,18 +392,28 @@ public static class HidPad
     /// 那部分测不了, 但**映射逻辑**是纯的, 能钉住。</para>
     /// </summary>
     public static PadState? ParseHid(IntPtr pp, byte[] b, uint len, ushort[] scratch, out int nUsed)
+        => ParseHid(pp, b, len, scratch, out nUsed, null);
+
+    /// <param name="lay">【2.4.12】这份报告该怎么问(用法挂在哪些 collection 上)。
+    /// 传 null = 一律问顶层 collection 0, 那是 2.4.11 及以前的老行为。</param>
+    public static PadState? ParseHid(IntPtr pp, byte[] b, uint len, ushort[] scratch,
+                                    out int nUsed, Layout lay)
     {
         nUsed = 0;
+        // 报告第一字节就是报告号。插线=0x01、蓝牙=0x31, 两套在描述符里**各在各的层**,
+        // 混着问就是 0xC011000A。所以按这一帧的报告号去挑层。
+        byte rid = len > 0 ? b[0] : (byte)0;
+        ushort alc = lay?.AxisLcFor(rid) ?? 0;
         // X 问不到就说明这一帧不是主输入报告(可能是固件 / 校准之类), 跳过。
-        if (HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_LX, out uint lx, pp, b, len) != HIDP_OK)
-            return null;
+        uint st = HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_LX, out uint lx, pp, b, len);
+        if (st != HIDP_OK) return null;
 
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_LY, out uint ly, pp, b, len);
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_RX, out uint rx, pp, b, len);
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_RY, out uint ry, pp, b, len);
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_L2, out uint l2, pp, b, len);
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_R2, out uint r2, pp, b, len);
-        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, 0, U_HAT, out uint hat, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_LY, out uint ly, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_RX, out uint rx, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_RY, out uint ry, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_L2, out uint l2, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_R2, out uint r2, pp, b, len);
+        HidP_GetUsageValue(HidPReportType.HidP_Input, 0x01, alc, U_HAT, out uint hat, pp, b, len);
 
         ushort btn = HatBits(hat);
 
@@ -235,10 +421,24 @@ public static class HidPad
         //   第一版写成 0 传进去, HidP 一个都写不进来(只把"需要几个"写回来),
         //   结果**所有按钮全读不到** —— 十字键和扳机靠 GetUsageValue 走的, 所以那两样
         //   一直是好的, 只有按钮全哑。
-        int n = scratch.Length;
-        if (HidP_GetUsages(HidPReportType.HidP_Input, 0x09, 0, scratch, ref n, pp, b, len) == HIDP_OK)
-            btn |= MapUsages(scratch, n);
-        nUsed = n;
+        if (lay != null)
+        {
+            // 按钮可能分散在好几个层上: 逐个问, 按着的并起来。
+            foreach (var lc in lay.BtnLcsFor(rid))
+            {
+                int n = scratch.Length;
+                if (HidP_GetUsages(HidPReportType.HidP_Input, 0x09, lc, scratch,
+                                   ref n, pp, b, len) == HIDP_OK)
+                { btn |= MapUsages(scratch, n); nUsed += n; }
+            }
+        }
+        else
+        {
+            int n = scratch.Length;
+            if (HidP_GetUsages(HidPReportType.HidP_Input, 0x09, 0, scratch, ref n, pp, b, len) == HIDP_OK)
+                btn |= MapUsages(scratch, n);
+            nUsed = n;
+        }
 
         return new PadState
         {
@@ -321,7 +521,55 @@ public static class HidPad
         public IntPtr Handle;
         public IntPtr Preparsed;    // HidP 要的"预解析数据", 关句柄前要释放
         public int ReportLen;       // 这台设备自己声明的输入报告长度(见 HIDP_CAPS 那条注释)
+        public volatile Layout Lay; // 这份报告该怎么问(引用赋值是原子的, 换眼镜就是换它)
         public string Name;
+    }
+
+    /// <summary>
+    /// 【2.4.12】"这一帧该怎么问 HidP" —— 核心是 **link collection**。
+    ///
+    /// <para><c>HidP_GetUsageValue(..., collection, ...)</c> 的 collection 参数传 0 是
+    /// **只查顶层 collection**。手柄描述符要不是把摇杆/按钮直接挂在顶层(插线很多是),
+    /// 而是塞进子 collection(蓝牙很多是), 传 0 就**一个都问不到** —— 表现出来就是
+    /// "报告铺天盖地地来, 一个都解不出"。2.4.11 那版日志里"收到 5399 个报告, 解出 0 个"
+    /// 就是这个: 蓝牙那套描述符的组织方式跟插线不一样, 我们却一直按插线的问。</para>
+    ///
+    /// <para>顺带:<c>ReportID</c> 不用我们操心 —— HidP 自己拿报告首字节去跟描述符对,
+    /// 对不上是另一码事(那时错误码会是 0xC011000C)。</para>
+    /// </summary>
+    public sealed class Layout
+    {
+        public Cap[] Axes = Array.Empty<Cap>();   // 含左摇杆 X 的轴声明(可能一号报告一份)
+        public Cap[] Btns = Array.Empty<Cap>();   // 按钮声明(page 0x09)
+
+        /// <summary>
+        /// **这一号报告**的摇杆挂在第几层。同一个描述符里 0x01(插线) 和 0x31(蓝牙)
+        /// 两种报告各有各的层, 混着问就是 0xC011000A(报告号对不上)。
+        /// 描述符没声明这一号报告时退回第一个 / 顶层 0。
+        /// </summary>
+        public ushort AxisLcFor(byte rid)
+        {
+            foreach (var c in Axes) if (c.Rid == rid) return c.Lc;
+            return Axes.Length > 0 ? Axes[0].Lc : (ushort)0;
+        }
+
+        /// <summary>这一号报告的按钮挂在哪些层(去重)。这一号没有就全收, 再没有就按摇杆那层问。</summary>
+        public ushort[] BtnLcsFor(byte rid)
+        {
+            var set = new List<ushort>();
+            foreach (var c in Btns) if (c.Rid == rid && !set.Contains(c.Lc)) set.Add(c.Lc);
+            if (set.Count == 0) foreach (var c in Btns) if (!set.Contains(c.Lc)) set.Add(c.Lc);
+            if (set.Count == 0) set.Add(AxisLcFor(rid));
+            return set.ToArray();
+        }
+
+        public override string ToString()
+        {
+            var s = new List<string>();
+            foreach (var c in Axes)
+            { string t = $"0x{c.Rid:X2}@{c.Lc}"; if (!s.Contains(t)) s.Add(t); }
+            return "轴 " + (s.Count == 0 ? "(描述符里没声明)" : string.Join(" ", s));
+        }
     }
 
     /// <summary>
@@ -340,7 +588,27 @@ public static class HidPad
 
             IntPtr h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                   IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
-            if (h == INVALID_HANDLE) continue;
+            if (h == INVALID_HANDLE)
+            {
+                // 打不开 ≠ 不存在。**被游戏 / Steam 独占**时 CreateFile 直接失败
+                // (32 = 共享冲突, 5 = 拒绝访问) —— 手柄插着、灯亮着, 就是轮不到
+                // 我们读。用户报过"USB 插着按唤醒键有时按不出来", 这一行就是
+                // 分辨"没插"和"被抢"的线索(没这行, 两种病在日志里长得一样)。
+                if (maybe)
+                {
+                    int err = Marshal.GetLastWin32Error();
+                    long nowMs = Environment.TickCount64;
+                    if (err != _openErr || nowMs - _openErrAt > 30000)   // 同样的错别刷屏
+                    {
+                        App.Log($"HID: 手柄接口打不开(错误 {err}"
+                              + (err == 32 ? ", 共享冲突 = 被游戏/Steam 独占了"
+                                 : err == 5 ? ", 拒绝访问 = 被独占了" : "") + ")");
+                        _openErr = err;
+                        _openErrAt = nowMs;
+                    }
+                }
+                continue;
+            }
 
             var attr = new HIDD_ATTRIBUTES { Size = Marshal.SizeOf<HIDD_ATTRIBUTES>() };
             if (!HidD_GetAttributes(h, out attr) || !IsOurs(attr.VendorID, attr.ProductID))
@@ -358,11 +626,96 @@ public static class HidPad
             {
                 Handle = h, Preparsed = pp,
                 ReportLen = Math.Max(len, 64),
+                Lay = PickLayout(pp),          // 【2.4.12】别再一律按"挂在顶层"问
                 Name = NameOf(attr.ProductID),
             });
         }
         return res;
     }
+
+    // ============================================================ 【2.4.12】描述符怎么组织的
+    // HIDP_VALUE_CAPS / HIDP_BUTTON_CAPS 的 stride 和字段偏移, 跟 DumpButtonCaps 里
+    // 实测的是一套(button 和 value 两种 caps 的前半截布局相同)。
+    const int CAPS_STRIDE = 72;
+    const int CAPS_OFF_PAGE = 0, CAPS_OFF_RID = 2, CAPS_OFF_LC = 6;
+    const int CAPS_OFF_ISRANGE = 12, CAPS_OFF_UMIN = 56, CAPS_OFF_UMAX = 58;
+
+    public struct Cap
+    {
+        public ushort Page; public byte Rid; public ushort Lc;
+        public bool Range; public ushort UMin, UMax;
+    }
+
+    /// <summary>问描述符"你声明了哪些轴 / 哪些按钮"。传 <paramref name="button"/> 分真假。</summary>
+    static List<Cap> ReadCaps(IntPtr pp, bool button)
+    {
+        var res = new List<Cap>();
+        ushort n = 0;
+        // ⚠ 传空 buffer 进去, 它回的是 **BUFFER_TOO_SMALL(0xC0110007)**, 但**数量照写进 n**
+        //   —— 2.4.12 第一版把返回值当成了"失败", 列表恒为空, 于是那句"描述符里没有
+        //   0x01 页的轴"是**假象**(真描述符里其实有), 挑层也就跟着挑错了。只看 n。
+        if (button) HidP_GetButtonCaps(HidPReportType.HidP_Input, IntPtr.Zero, ref n, pp);
+        else HidP_GetValueCaps(HidPReportType.HidP_Input, IntPtr.Zero, ref n, pp);
+        if (n == 0) return res;
+
+        n = Math.Min(n, (ushort)64);                     // 手柄不会有更多; 顺便别越界
+        IntPtr p = Marshal.AllocHGlobal(CAPS_STRIDE * n);
+        try
+        {
+            ushort m = n;
+            uint st = button
+                ? HidP_GetButtonCaps(HidPReportType.HidP_Input, p, ref m, pp)
+                : HidP_GetValueCaps(HidPReportType.HidP_Input, p, ref m, pp);
+            if (st != HIDP_OK) return res;
+            for (int i = 0; i < m; i++)
+            {
+                int b = i * CAPS_STRIDE;
+                res.Add(new Cap
+                {
+                    Page = (ushort)Marshal.ReadInt16(p, b + CAPS_OFF_PAGE),
+                    Rid = Marshal.ReadByte(p, b + CAPS_OFF_RID),
+                    Lc = (ushort)Marshal.ReadInt16(p, b + CAPS_OFF_LC),
+                    Range = Marshal.ReadByte(p, b + CAPS_OFF_ISRANGE) != 0,
+                    UMin = (ushort)Marshal.ReadInt16(p, b + CAPS_OFF_UMIN),
+                    UMax = (ushort)Marshal.ReadInt16(p, b + CAPS_OFF_UMAX),
+                });
+            }
+        }
+        finally { Marshal.FreeHGlobal(p); }
+        return res;
+    }
+
+    /// <summary>
+    /// 照描述符挑一副"眼镜": 摇杆挂哪个 collection、按钮挂哪些 collection。
+    /// 挑不出来(描述符太怪)就退回顶层 0 —— 那是 2.4.11 及以前的行为, 至少不比原来差。
+    /// </summary>
+    static Layout PickLayout(IntPtr pp)
+        => PickLayoutFrom(ReadCaps(pp, false), ReadCaps(pp, true));
+
+    /// <summary>
+    /// **纯函数**(不碰设备, 给 <c>tools/hidprobe</c> 钉的): 照"描述符声明了什么"挑眼镜。
+    /// 摇杆在哪个 collection 就用哪个; 按钮可能分散, 收全了逐个问再并起来。
+    /// 挑不出来就退回 0(顶层) —— 那是 2.4.11 及以前的老行为, 至少不比原来差。
+    /// </summary>
+    /// <summary>
+    /// **纯函数**(不碰设备, 给 <c>tools/hidprobe</c> 钉的): 把描述符里"哪些声明跟摇杆有关、
+    /// 哪些是按钮"分出来, 之后**按报告号**取用(见 <see cref="Layout.AxisLcFor"/>)。
+    /// 描述符可能同时声明插线(0x01)和蓝牙(0x31)两套, 各在各的层 —— 所以不在这里定死。
+    /// </summary>
+    public static Layout PickLayoutFrom(IEnumerable<Cap> axes, IEnumerable<Cap> btns)
+        => new Layout
+        {
+            Axes = axes.Where(IsLeftStickX).ToArray(),
+            Btns = btns.Where(c => c.Page == 0x09).ToArray(),
+        };
+
+    /// <summary>这条声明说的是左摇杆 X 吗?(描述符也可能用"用法范围"一口气声明六个轴)</summary>
+    public static bool IsLeftStickX(Cap c)
+        => c.Page == 0x01
+        && (c.Range ? (c.UMin <= U_LX && U_LX <= c.UMax) : c.UMin == U_LX);
+
+
+
 
     static List<string> EnumeratePaths()
     {
@@ -568,7 +921,9 @@ public static class HidPad
                 { sb.AppendLine("  (3 秒没读到报告 —— 手柄可能睡了, 按一颗键再试)"); continue; }
 
                 sb.AppendLine($"  首帧 {got} 字节: " + BitConverter.ToString(buf, 0, (int)Math.Min(got, 20)));
-                var st = ParseHid(pp, buf, got, new ushort[32], out int n);
+                var layD = PickLayout(pp);                 // 诊断也别一律按顶层问
+                var st = ParseHid(pp, buf, got, new ushort[32], out int n, layD);
+                sb.AppendLine($"  照 {layD} 解");
                 sb.AppendLine(st == null
                     ? "  ParseHid: null(这一帧不是主输入报告, 或者描述符对不上)"
                     : $"  ParseHid: 键=0x{st.Value.Buttons:X4} 杆({st.Value.LX},{st.Value.LY})"
@@ -687,6 +1042,14 @@ public static class HidPad
         IntPtr detail, uint size, out uint need, IntPtr devInfoData);
 
     [DllImport("setupapi.dll")] static extern bool SetupDiDestroyDeviceInfoList(IntPtr di);
+
+    /// <summary>
+    /// 取消这个句柄上还没完的 I/O。看门狗用它把**堵死在 ReadFile 里**的读线程
+    /// 放出来(详见 <see cref="SILENT_MS"/> 上面那段)。lpOverlapped 传 null =
+    /// 取消这个句柄上所有的。Vista+ 都有, 我们的 TFM 远高于它。
+    /// </summary>
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CancelIoEx(IntPtr hFile, IntPtr lpOverlapped);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     static extern IntPtr CreateFile(string name, uint access, uint share, IntPtr sec,

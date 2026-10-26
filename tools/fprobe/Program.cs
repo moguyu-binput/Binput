@@ -311,10 +311,23 @@ try
         Check("摇杆把光标停在 3 上", c.Key9 == 3, $"Key9={c.Key9}");
 
         TextOutput.Reset();
-        Hold(GamepadInput.A, 600, 30000, 30000, 255);   // 长按
+        // 长按到点那一帧: 短语发出去。【2.4.7】光标不许被按回中心 ——
+        // 用户报"长按数字发快捷短语, 左摇杆瞬间闪回中心, 再回到推的地方":
+        // 根因是 QuickSend(预输入版) -> QuickClose -> ClearInput 里写着 Key9 = 5,
+        // 而摇杆还推着, 下一帧 HandleStick 又把它拽回 3, 中间闪一下。
+        // (不能直接用下面的 Hold 助手: 它最后会松 A, 断言必须赶在那一帧之前读 Key9)
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = GamepadInput.A, LX = 30000, LY = 30000, LeftTrigger = 255 }, t);
+        t = t.AddMilliseconds(600);
+        c.Poll(new PadState { Connected = true, Buttons = GamepadInput.A, LX = 30000, LY = 30000, LeftTrigger = 255 }, t);
         Check("长按后把那条短语接进了预览框", NoteOf(c) == "集合打本", $"框里=\"{NoteOf(c)}\"");
         Check("没有去动剪贴板 / 焦点", TextOutput.Sent.Count == 0,
               $"发出={string.Join("|", TextOutput.Sent)}");
+        Check("发短语那一帧光标还在 3 上(不闪回中心)", c.Key9 == 3, $"Key9={c.Key9}");
+        // 松开 A(摇杆还推着): 光标继续跟着手走, 不回中
+        t = t.AddMilliseconds(20);
+        c.Poll(new PadState { Connected = true, Buttons = 0, LX = 30000, LY = 30000, LeftTrigger = 255 }, t);
+        Check("松手后光标还在 3 上", c.Key9 == 3, $"Key9={c.Key9}");
 
         // 松开 LT 应该回九键
         t = t.AddMilliseconds(20);

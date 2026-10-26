@@ -1034,7 +1034,21 @@ public partial class OverlayWindow : Window, IQuickUI
     }
 
     const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOZORDER = 0x0004,
-               SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020;
+               SWP_NOACTIVATE = 0x0010, SWP_FRAMECHANGED = 0x0020, SWP_SHOWWINDOW = 0x0040;
+    const int HWND_TOPMOST = -1;
+
+    /// <summary>
+    /// 把窗口重新摁回置顶(直出版才需要; 预输入版要让输入法候选浮在自己上面, 见
+    /// <see cref="Preview"/> setter)。每次唤出归位后补一脚 —— 游戏全屏那几帧会
+    /// 把自己插到我们上面, 而 WPF 的 Topmost 只在建窗时断言一次, 之后就不管了。
+    /// </summary>
+    void ForceTopmost()
+    {
+        var hwnd = Handle;
+        if (hwnd == IntPtr.Zero) return;
+        SetWindowPos(hwnd, (IntPtr)HWND_TOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
 
     [DllImport("user32.dll")]
     static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
@@ -1156,6 +1170,12 @@ public partial class OverlayWindow : Window, IQuickUI
         HoldFade(1);
         UpdateLayout();              // 尺寸再定一次稿: 停留期间内容可能还在变
         PositionBottomCenter();
+        // 归位这一下顺带把"置顶"重新断言一遍: 游戏(尤其全屏那几帧)会把自己插到
+        // 我们上面, 而 WPF 的 Topmost 只在建窗时断言一次。用户实测的线索: 英伟达
+        // 提示条弹出来时(游戏暂时让位)唤出很灵敏, 提示条一没就唤不出来 ——
+        // 窗口其实归位了, 只是被游戏盖了回去。预输入版不置顶(要让输入法候选
+        // 浮在自己上面, 见 Preview setter 那段)。
+        if (!_preview) ForceTopmost();
         App.Log($"唤出: 屏幕外停 {(DateTime.Now - _holdAt).TotalMilliseconds:0}ms"
                 + $"({_holdFrames} 帧)后归位 ({ActualWidth:0}x{ActualHeight:0} @ {Left:0},{Top:0})");
         // 归位这一下必须催一次重合成, 而且要**隔一会儿再催一次**: 窗口刚才在屏幕外
