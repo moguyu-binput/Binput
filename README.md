@@ -6,6 +6,10 @@
 > A gamepad T9 Chinese input method for Windows — type Chinese with a controller
 > without ever letting go of it. Built for FF14.
 
+> ⚠️ **纯 AI 生成的实验项目，仅个人测试用。** 它能读手柄并模拟键盘输入，
+> 可能被 Windows 安全机制拦下、可能与游戏反作弊冲突（有封号风险），
+> 也可能丢字卡键。请自行判断是否使用，风险自负；作者不承担任何责任。
+
 - [怎么装](#怎么装)
 - [一句话思路](#一句话思路)
 - [两个版本](#两个版本)
